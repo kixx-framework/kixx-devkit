@@ -8,6 +8,7 @@ import {
 } from 'kixx-assert';
 import {
     findMissingKeys,
+    findMissingNonEmptyStringKeys,
     loadConfiguration,
 } from '../../../lib/config-loader.js';
 
@@ -37,6 +38,25 @@ describe('ConfigLoader', ({ it }) => {
         assertEqual('service.nil', missing[0]);
         assertEqual('service.unknown', missing[1]);
         assertEqual('scalar.child', missing[2]);
+    });
+
+    it('reports dotted key paths which are not non-empty strings', () => {
+        const source = {
+            worker: {
+                empty: '',
+                name: 'example-worker',
+            },
+        };
+
+        const missing = findMissingNonEmptyStringKeys(source, [
+            'worker.name',
+            'worker.empty',
+            'worker.unknown',
+        ]);
+
+        assertEqual(2, missing.length);
+        assertEqual('worker.empty', missing[0]);
+        assertEqual('worker.unknown', missing[1]);
     });
 
     it('merges home and project layers without reading the filesystem', async () => {

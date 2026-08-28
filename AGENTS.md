@@ -6,7 +6,7 @@ Use this documentation index to identify which linked documents are relevant to 
 
 ### Code Style Guide
 
-src/docs/code-style-guide.md
+agents/docs/code-style-guide.md
 
 **When to use this document:** Apply this guide whenever you are writing or modifying any server-side JavaScript source file in this project. This includes:
 
@@ -21,7 +21,7 @@ src/docs/code-style-guide.md
 
 ### Code Documentation Guide
 
-src/docs/code-documentation-guide.md
+agents/docs/code-documentation-guide.md
 
 **When to use this document:** Apply this guide whenever you are writing, reviewing, or improving JSDoc block comments in any JavaScript source file in this project. This includes:
 
@@ -29,6 +29,18 @@ src/docs/code-documentation-guide.md
 - Reviewing or updating existing documentation for accuracy and completeness.
 - Deciding whether a given symbol *needs* documentation at all.
 - Choosing the right JSDoc tags for a given situation.
+
+### CLI Commands Guide
+
+commands/README.md
+
+**When to use this document:** Apply this guide whenever you are adding, modifying, or reviewing a CLI command or sub-command under `commands/`. This includes:
+
+- Creating a new top level command directory or a new sub-command module.
+- Changing a command's options, positional arguments, or required configuration and secrets.
+- Deciding whether logic belongs in a command module or in `lib/`.
+
+**What this document provides:** How the `kixx.js` runner discovers commands, the contract for the `index.js` metadata module and the sub-command class (static `description`, `options`, `positionals`, `requiredConfig`, `requiredSecrets`, `requiredCloudflareConfig`), what the runner injects into the constructor, the `run()` signature and exit code and error handling conventions, and the steps to verify a new command.
 
 ### Unit Testing Guide
 

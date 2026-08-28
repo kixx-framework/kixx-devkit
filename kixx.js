@@ -6,7 +6,15 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import CommandRegistry from './lib/command-registry.js';
 import UsageError from './lib/usage-error.js';
-import { findMissingKeys, loadConfiguration } from './lib/config-loader.js';
+import {
+    CLOUDFLARE_CONFIG_FILE_NAME,
+    loadCloudflareConfig,
+} from './lib/cloudflare-config-loader.js';
+import {
+    findMissingKeys,
+    findMissingNonEmptyStringKeys,
+    loadConfiguration,
+} from './lib/config-loader.js';
 
 
 const HELP_LINE_WIDTH = 80;
@@ -83,6 +91,7 @@ function renderHelp(sections) {
         subCommands,
         requiredConfig,
         requiredSecrets,
+        requiredCloudflareConfig,
     } = sections;
 
     const lines = [];
@@ -93,7 +102,7 @@ function renderHelp(sections) {
     }
 
     if (usage) {
-        lines.push(`Usage: kp.js ${ usage }`);
+        lines.push(`Usage: kixx.js ${ usage }`);
         lines.push('');
     }
 
@@ -146,6 +155,7 @@ function renderHelp(sections) {
 
     appendRequiredSettings(lines, 'Required .kixx/config.json settings:', requiredConfig);
     appendRequiredSettings(lines, 'Required .kixx/secrets.json settings:', requiredSecrets);
+    appendRequiredSettings(lines, 'Required cloudflare-config.js settings:', requiredCloudflareConfig);
 
     process.stdout.write(`${ lines.join('\n') }\n`);
 }
@@ -210,6 +220,25 @@ function assertRequiredSettings(args) {
     throw new UsageError(lines.join('\n'));
 }
 
+function assertNonEmptyStringSettings(args) {
+    const {
+        commandLabel,
+        settingsLabel,
+        source,
+        keyPaths,
+        filepaths,
+    } = args ?? {};
+    const missing = findMissingNonEmptyStringKeys(source, keyPaths);
+
+    assertRequiredSettings({
+        commandLabel,
+        settingsLabel,
+        source: Object.fromEntries(missing.map((keyPath) => [ keyPath, undefined ])),
+        keyPaths: missing,
+        filepaths,
+    });
+}
+
 async function main() {
     const args = parseArgs({
         strict: false,
@@ -266,6 +295,7 @@ async function main() {
                 options: Command.options ?? {},
                 requiredConfig: Command.requiredConfig,
                 requiredSecrets: Command.requiredSecrets,
+                requiredCloudflareConfig: Command.requiredCloudflareConfig,
             });
             return 0;
         }
@@ -317,6 +347,19 @@ async function main() {
     // Loaded here rather than at startup so help output and unresolved command
     // names still work in a directory holding a malformed config file.
     const configuration = await loadConfiguration();
+    let cloudflareConfig;
+
+    if (commandName === 'cloudflare') {
+        cloudflareConfig = await loadCloudflareConfig(configuration.projectDirectory);
+
+        assertNonEmptyStringSettings({
+            commandLabel: `${ commandName } ${ subCommandName }`,
+            settingsLabel: 'Cloudflare configuration settings',
+            source: cloudflareConfig,
+            keyPaths: Command.requiredCloudflareConfig,
+            filepaths: [ path.join(configuration.projectDirectory, CLOUDFLARE_CONFIG_FILE_NAME) ],
+        });
+    }
 
     assertRequiredSettings({
         commandLabel: `${ commandName } ${ subCommandName }`,
@@ -336,6 +379,7 @@ async function main() {
 
     const command = new Command({
         projectDirectory: configuration.projectDirectory,
+        cloudflareConfig,
         config: configuration.config,
         secrets: configuration.secrets,
     });

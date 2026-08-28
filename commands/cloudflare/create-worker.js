@@ -1,7 +1,7 @@
 import process from 'node:process';
 import { isNonEmptyString } from 'kixx-assert';
 import UsageError from '../../lib/usage-error.js';
-import createCloudflareApiClient from '../../lib/create-cloudflare-api-client.js';
+import CloudflareApiClient from '../../lib/cloudflare/cloudflare-api-client.js';
 import { subcommands } from './index.js';
 
 
@@ -33,7 +33,7 @@ export default class CloudflareCreateWorkerCommand {
             throw new UsageError('cloudflare create-worker requires a --name option');
         }
 
-        const client = createCloudflareApiClient(this.#secrets);
+        const client = new CloudflareApiClient.create(this.#secrets.cloudflare);
 
         const worker = await client.createWorker({ name: options.name });
 

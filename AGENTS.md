@@ -4,6 +4,12 @@ Developer Documentation
 -----------------------
 Use this documentation index to identify which linked documents are relevant to your task, then read the full text of each linked document — the index entries are summaries only. Keep the available documentation in mind as you work and review relevant documentation as your understanding of the task deepens. Avoid going off task or doing incorrect work because you did not review the relevant documentation.
 
+### Unit Testing Guide
+
+test/README.md
+
+**When to use this document:** Apply this guide whenever you are writing, modifying, or reviewing unit tests. It defines the project’s test file layout and naming conventions, suite and hook patterns, assertion and mocking APIs, timeout and skipping behavior, shared conformance suites, and expectations for focused, deterministic tests.
+
 ### Code Style Guide
 
 src/docs/code-style-guide.md

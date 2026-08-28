@@ -9,6 +9,11 @@ export default class CloudflareCreateWorkerCommand {
 
     static description = subcommands['create-worker'].description;
 
+    static requiredSecrets = [
+        'cloudflare.accountId',
+        'cloudflare.apiToken',
+    ];
+
     static options = {
         name: {
             type: 'string',

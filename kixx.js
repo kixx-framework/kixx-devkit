@@ -5,13 +5,11 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import CommandRegistry from './lib/command-registry.js';
+import UsageError from './lib/usage-error.js';
+import { findMissingKeys, loadConfiguration } from './lib/config-loader.js';
 
 
 const HELP_LINE_WIDTH = 80;
-
-
-const config = {};
-const secrets = {};
 
 
 function wrapText(text, lineWidth) {
@@ -83,6 +81,8 @@ function renderHelp(sections) {
         options,
         commands,
         subCommands,
+        requiredConfig,
+        requiredSecrets,
     } = sections;
 
     const lines = [];
@@ -144,7 +144,23 @@ function renderHelp(sections) {
         }
     }
 
+    appendRequiredSettings(lines, 'Required .kixx/config.json settings:', requiredConfig);
+    appendRequiredSettings(lines, 'Required .kixx/secrets.json settings:', requiredSecrets);
+
     process.stdout.write(`${ lines.join('\n') }\n`);
+}
+
+function appendRequiredSettings(lines, heading, keyPaths) {
+    if (!keyPaths || keyPaths.length === 0) {
+        return;
+    }
+
+    lines.push('');
+    lines.push(heading);
+
+    for (const keyPath of keyPaths) {
+        lines.push(`  ${ keyPath }`);
+    }
 }
 
 function createCommandUsage(commandName, subCommandName, positionals = []) {
@@ -160,6 +176,40 @@ function createCommandUsage(commandName, subCommandName, positionals = []) {
     return usageParts.join(' ');
 }
 
+// Fails before the command is constructed so a command never runs partially
+// configured, and so the message can name the files the value belongs in
+// rather than surfacing as an assertion failure deep inside an API client.
+function assertRequiredSettings(args) {
+    const {
+        commandLabel,
+        settingsLabel,
+        source,
+        keyPaths,
+        filepaths,
+    } = args ?? {};
+
+    const missing = findMissingKeys(source, keyPaths);
+
+    if (missing.length === 0) {
+        return;
+    }
+
+    const lines = [ `Missing required ${ settingsLabel } for "${ commandLabel }":` ];
+
+    for (const keyPath of missing) {
+        lines.push(`  ${ keyPath }`);
+    }
+
+    lines.push('');
+    lines.push('Set them in one of these files:');
+
+    for (const filepath of filepaths) {
+        lines.push(`  ${ filepath }`);
+    }
+
+    throw new UsageError(lines.join('\n'));
+}
+
 async function main() {
     const args = parseArgs({
         strict: false,
@@ -173,9 +223,9 @@ async function main() {
         },
     });
 
-    const projectDirectory = path.dirname(fileURLToPath(import.meta.url));
+    const devkitInstallDirectory = path.dirname(fileURLToPath(import.meta.url));
 
-    const commandRegistry = new CommandRegistry(path.join(projectDirectory, 'commands'));
+    const commandRegistry = new CommandRegistry(path.join(devkitInstallDirectory, 'commands'));
 
     const [ commandName, subCommandName ] = args.positionals;
 
@@ -214,6 +264,8 @@ async function main() {
                 description: Command.description,
                 positionals: Command.positionals ?? [],
                 options: Command.options ?? {},
+                requiredConfig: Command.requiredConfig,
+                requiredSecrets: Command.requiredSecrets,
             });
             return 0;
         }
@@ -262,10 +314,30 @@ async function main() {
         options: Command.options ?? {},
     });
 
+    // Loaded here rather than at startup so help output and unresolved command
+    // names still work in a directory holding a malformed config file.
+    const configuration = await loadConfiguration();
+
+    assertRequiredSettings({
+        commandLabel: `${ commandName } ${ subCommandName }`,
+        settingsLabel: 'configuration settings',
+        source: configuration.config,
+        keyPaths: Command.requiredConfig,
+        filepaths: configuration.configFilepaths,
+    });
+
+    assertRequiredSettings({
+        commandLabel: `${ commandName } ${ subCommandName }`,
+        settingsLabel: 'secrets',
+        source: configuration.secrets,
+        keyPaths: Command.requiredSecrets,
+        filepaths: configuration.secretsFilepaths,
+    });
+
     const command = new Command({
-        projectDirectory: process.cwd(),
-        config,
-        secrets,
+        projectDirectory: configuration.projectDirectory,
+        config: configuration.config,
+        secrets: configuration.secrets,
     });
 
     return await command.run(commandArgs.values, ...commandArgs.positionals);

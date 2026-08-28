@@ -1,5 +1,7 @@
 import process from 'node:process';
+import { isPlainObject } from 'kixx-assert';
 import CloudflareApiClient from '../../lib/cloudflare/cloudflare-api-client.js';
+import UsageError from '../../lib/usage-error.js';
 import { subcommands } from './index.js';
 
 
@@ -7,12 +9,18 @@ export default class CloudflareCreateWorkerCommand {
 
     static description = subcommands['create-worker'].description;
 
+    static options = {
+        environment: {
+            type: 'string',
+            short: 'e',
+            description: 'Environment whose WORKER configuration will be created',
+        },
+    };
+
     static requiredSecrets = [
         'cloudflare.accountId',
         'cloudflare.apiToken',
     ];
-
-    static requiredCloudflareConfig = [ 'name' ];
 
     #cloudflareConfig;
     #secrets;
@@ -23,10 +31,22 @@ export default class CloudflareCreateWorkerCommand {
         this.#secrets = secrets;
     }
 
-    async run() {
+    async run(options) {
+        const { environment } = options ?? {};
+        const configPath = `environments.${ environment }.WORKER`;
+        const workerConfig = this.#cloudflareConfig?.environments?.[environment]?.WORKER;
+
+        if (!environment) {
+            throw new UsageError('The --environment option is required');
+        }
+
+        if (!isPlainObject(workerConfig)) {
+            throw new UsageError(`Missing required Cloudflare configuration: ${ configPath }`);
+        }
+
         const client = new CloudflareApiClient(this.#secrets.cloudflare);
 
-        const worker = await client.createWorker({ name: this.#cloudflareConfig.name });
+        const worker = await client.createWorker(workerConfig);
 
         process.stdout.write(`${ JSON.stringify(worker, null, 4) }\n`);
 

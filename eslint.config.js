@@ -351,5 +351,5 @@ export default [
                 'error',
             ],
         },
-    }
+    },
 ];

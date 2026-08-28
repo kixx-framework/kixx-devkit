@@ -1,0 +1,6 @@
+{
+  "autoMemoryEnabled": false,
+  "includeGitInstructions": false,
+  "respectGitignore": false,
+  "showThinkingSummaries": true
+}

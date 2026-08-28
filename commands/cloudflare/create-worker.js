@@ -33,7 +33,7 @@ export default class CloudflareCreateWorkerCommand {
             throw new UsageError('cloudflare create-worker requires a --name option');
         }
 
-        const client = new CloudflareApiClient.create(this.#secrets.cloudflare);
+        const client = new CloudflareApiClient(this.#secrets.cloudflare);
 
         const worker = await client.createWorker({ name: options.name });
 

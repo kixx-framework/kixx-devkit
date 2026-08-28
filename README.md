@@ -33,7 +33,7 @@ node run-tests.js test/unit-tests/lib
 node run-tests.js --skip test/unit-tests/lib/config-loader.test.js
 ```
 
-Run both, linter first, which is what CI does:
+Run both, linter first:
 
 ```
 npm test

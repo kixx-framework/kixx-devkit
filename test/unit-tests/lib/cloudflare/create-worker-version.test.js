@@ -143,21 +143,56 @@ describe('create-worker-version', ({ it }) => {
 
         await createWorkerVersion(runOptions({ apiClient, fileSystem }));
 
-        // Simulate the Worker's recorded class list falling behind config
-        // (for instance a hand-edited state file) with every hash left
-        // untouched, so only the migration should force the next upload.
-        const state = JSON.parse(fileSystem.written[STATE_FILEPATH]);
-        state.durableObjectClasses = [];
-        fileSystem.files[STATE_FILEPATH] = `${ JSON.stringify(state, null, 4) }\n`;
-        delete fileSystem.written[STATE_FILEPATH];
+        // A class recorded from an earlier run and now dropped from config,
+        // with every hash left untouched, so only the migration should force
+        // the next upload. DURABLE_OBJECT_MIGRATIONS is hashed nowhere.
+        recordClasses(fileSystem, [ 'LegacyStore' ], 'v1');
+        const config = makeCloudflareConfig();
+        config.environments.production.DURABLE_OBJECT_MIGRATIONS = [
+            { action: 'delete', className: 'LegacyStore' },
+        ];
 
-        const result = await createWorkerVersion(runOptions({ apiClient, fileSystem }));
+        const result = await createWorkerVersion(runOptions({ apiClient, fileSystem, cloudflareConfig: config }));
 
         assertEqual('created', result.outcome);
         assertEqual(false, result.changes.modules);
         assertEqual(false, result.changes.bindings);
         assertEqual(false, result.changes.config);
         assert(result.migrations, 'expected a migration to be recorded');
+    });
+
+    it('throws a UsageError before uploading when a version binds a class its own migration introduces', async () => {
+        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+        const config = withContentStore(makeCloudflareConfig());
+
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ apiClient, fileSystem, cloudflareConfig: config }));
+        });
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('ContentAddressableIndexStore'), 'expected the message to name the class');
+        assert(caught.message.includes('CONTENT_STORE_DO'), 'expected the message to name the binding');
+        assert(caught.message.includes(STATE_FILEPATH), 'expected the message to name the state file');
+        assertEqual(0, apiClient.calls.createWorkerVersion.length);
+        assert(!Object.prototype.hasOwnProperty.call(fileSystem.written, STATE_FILEPATH), 'expected no state file written');
+    });
+
+    it('allows a Durable Object binding once its class is already recorded', async () => {
+        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+        const config = withContentStore(makeCloudflareConfig());
+
+        await createWorkerVersion(runOptions({ apiClient, fileSystem }));
+        recordClasses(fileSystem, [ 'ContentAddressableIndexStore' ], 'v1');
+
+        const result = await createWorkerVersion(runOptions({ apiClient, fileSystem, cloudflareConfig: config }));
+        const payload = apiClient.calls.createWorkerVersion[1].version;
+
+        assertEqual('created', result.outcome);
+        assertEqual(null, result.migrations);
+        assert(!Object.prototype.hasOwnProperty.call(payload, 'migrations'), 'expected no migrations key');
     });
 
     it('uploads when nothing changed and --force is set', async () => {
@@ -239,10 +274,8 @@ describe('create-worker-version', ({ it }) => {
     it('omits migrations and leaves migrationTag unchanged when no migration applies', async () => {
         const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
-        const config = makeCloudflareConfig();
-        delete config.environments.production.CONTENT_STORE;
 
-        await createWorkerVersion(runOptions({ apiClient, fileSystem, cloudflareConfig: config }));
+        await createWorkerVersion(runOptions({ apiClient, fileSystem }));
 
         const payload = apiClient.calls.createWorkerVersion[0].version;
         const state = JSON.parse(fileSystem.written[STATE_FILEPATH]);
@@ -255,14 +288,41 @@ describe('create-worker-version', ({ it }) => {
         const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
-        const result = await createWorkerVersion(runOptions({ apiClient, fileSystem }));
+        await createWorkerVersion(runOptions({ apiClient, fileSystem }));
+        recordClasses(fileSystem, [ 'LegacyStore' ], 'v1');
 
-        const payload = apiClient.calls.createWorkerVersion[0].version;
+        const result = await createWorkerVersion(runOptions({
+            apiClient,
+            fileSystem,
+            cloudflareConfig: withDeleteMigration(makeCloudflareConfig(), 'LegacyStore'),
+        }));
+
+        const payload = apiClient.calls.createWorkerVersion[1].version;
         const state = JSON.parse(fileSystem.written[STATE_FILEPATH]);
+
+        assertEqual('v1', payload.migrations.old_tag);
+        assertEqual('v2', payload.migrations.new_tag);
+        assertEqual('v2', state.migrationTag);
+        assertEqual('v2', result.migrations.newTag);
+    });
+
+    it('omits old_tag on the first migration a Worker has ever carried', async () => {
+        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+
+        await createWorkerVersion(runOptions({ apiClient, fileSystem }));
+        recordClasses(fileSystem, [ 'LegacyStore' ], null);
+
+        const result = await createWorkerVersion(runOptions({
+            apiClient,
+            fileSystem,
+            cloudflareConfig: withDeleteMigration(makeCloudflareConfig(), 'LegacyStore'),
+        }));
+
+        const payload = apiClient.calls.createWorkerVersion[1].version;
 
         assertEqual(undefined, payload.migrations.old_tag);
         assertEqual('v1', payload.migrations.new_tag);
-        assertEqual('v1', state.migrationTag);
         assertEqual('v1', result.migrations.newTag);
     });
 
@@ -295,25 +355,99 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('rethrows a migration-tag rejection as a UsageError naming the tag to record', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = await migrationPending();
         const apiClient = makeApiClient({
             createWorkerVersion: async () => {
                 throw new CloudflareApiError('rejected', {
                     status: 409,
-                    errors: [ { code: 10061, message: 'migration tag mismatch' } ],
+                    errors: [ { code: 10061, message: 'provided old_tag "v1" does not match' } ],
                     method: 'POST',
                     url: 'x',
                 });
             },
         });
 
-        const caught = await catchAsyncError(() => createWorkerVersion(runOptions({ apiClient, fileSystem })));
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({
+                apiClient,
+                fileSystem,
+                cloudflareConfig: withDeleteMigration(makeCloudflareConfig(), 'LegacyStore'),
+            }));
+        });
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
-        assert(caught.message.includes('v1'), 'expected the message to name the tag to record');
+        assert(caught.message.includes('v2'), 'expected the message to name the tag to record');
+    });
+
+    it('does not misreport an unrelated migration failure as a stale tag', async () => {
+        const fileSystem = await migrationPending();
+        const apiClient = makeApiClient({
+            createWorkerVersion: async () => {
+                throw new CloudflareApiError('rejected', {
+                    status: 403,
+                    errors: [ { code: 100123, message: 'Durable Object binding depends on class Foo' } ],
+                    method: 'POST',
+                    url: 'x',
+                });
+            },
+        });
+
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({
+                apiClient,
+                fileSystem,
+                cloudflareConfig: withDeleteMigration(makeCloudflareConfig(), 'LegacyStore'),
+            }));
+        });
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('CloudflareApiError', caught.name);
     });
 });
+
+// A filesystem holding state from one successful run, with a recorded class
+// that config no longer declares, so the next run carries a delete migration
+// advancing v1 -> v2.
+async function migrationPending() {
+    const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+
+    await createWorkerVersion(runOptions({ fileSystem }));
+    recordClasses(fileSystem, [ 'LegacyStore' ], 'v1');
+
+    return fileSystem;
+}
+
+// Moves the state a run just wrote back to where the next run reads it, with
+// the recorded Durable Object classes and migration tag replaced and every
+// hash left untouched.
+function recordClasses(fileSystem, durableObjectClasses, migrationTag) {
+    const state = JSON.parse(fileSystem.written[STATE_FILEPATH]);
+
+    state.durableObjectClasses = durableObjectClasses;
+    state.migrationTag = migrationTag;
+
+    fileSystem.files[STATE_FILEPATH] = `${ JSON.stringify(state, null, 4) }\n`;
+    delete fileSystem.written[STATE_FILEPATH];
+}
+
+function withDeleteMigration(config, className) {
+    config.environments.production.DURABLE_OBJECT_MIGRATIONS = [ { action: 'delete', className } ];
+
+    return config;
+}
+
+function withContentStore(config) {
+    config.environments.production.CONTENT_STORE = {
+        kvBindingName: 'CONTENT_STORE_KV',
+        kvNamespaceName: 'kixx-test-content-store',
+        kvNamespaceId: 'content-namespace-id',
+        durableObjectBindingName: 'CONTENT_STORE_DO',
+        durableObjectClassName: 'ContentAddressableIndexStore',
+    };
+
+    return config;
+}
 
 function runOptions(overrides) {
     return {
@@ -346,13 +480,6 @@ function makeCloudflareConfig() {
                     bindingName: 'KEY_VALUE_STORE',
                     namespaceName: 'kixx-test-kv-store',
                     namespaceId: 'namespace-id',
-                },
-                CONTENT_STORE: {
-                    kvBindingName: 'CONTENT_STORE_KV',
-                    kvNamespaceName: 'kixx-test-content-store',
-                    kvNamespaceId: 'content-namespace-id',
-                    durableObjectBindingName: 'CONTENT_STORE_DO',
-                    durableObjectClassName: 'ContentAddressableIndexStore',
                 },
                 ENVARS: {
                     APP_NAME: 'kixx-test-app',

@@ -102,7 +102,7 @@ for a case that has not been observed.
 
 ### Task 1: Diagnostic contract and BundleError
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, `test/README.md`
 
@@ -172,19 +172,19 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Implemented BundleError with Diagnostic typedef, defensive diagnostic array copy, duplicate-free message formatting, and focused tests.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: The established UsageError pattern uses enumerable own name and code properties via Object.defineProperties(). Duplicate diagnostics are suppressed only in the human-readable message; the exposed diagnostics array retains every collected problem.
+- Actual files changed: `lib/bundler/bundle-error.js`, `test/unit-tests/lib/bundler/bundle-error.test.js`, `agents/plans/module-bundler.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/bundler/bundle-error.test.js` passed (4 tests); `node run-linter.js lib/bundler/bundle-error.js test/unit-tests/lib/bundler/bundle-error.test.js` passed; `npm run lint` was attempted but fails on pre-existing vendored Acorn sources under `lib/vendor/acorn/`.
 - Blockers: None.
 
 ---
 
 ### Task 2: Filesystem interface and default adapter
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md` (separate low-level adapters from general-purpose code), `test/README.md`
 
@@ -259,19 +259,20 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the frozen default FileSystem adapter and real-filesystem contract tests.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: isFile() treats ENOENT and ENOTDIR as false, while invalid path input propagates its TypeError. Full-project lint fails on pre-existing vendored Acorn sources; scoped lint verifies changed files.
+- Actual files changed: `lib/bundler/file-system.js`, `test/unit-tests/lib/bundler/file-system.test.js`, `agents/plans/module-bundler.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/bundler/file-system.test.js` passed (3 tests); `node run-linter.js lib/bundler/file-system.js test/unit-tests/lib/bundler/file-system.test.js` passed; `rg -n "node:fs" lib/bundler/` returned only `file-system.js`.
+- Blockers: None.
 - Blockers: None.
 
 ---
 
 ### Task 3: Parse and strip comments
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `lib/vendor/acorn/index.js`, `lib/vendor/acorn/src/options.js`
 
@@ -353,19 +354,19 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added a single-pass Acorn parser that returns the AST and line-preserving comment-stripped source, with focused tests.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: Despite the plan's prior expectation, the vendored Acorn release reports a leading hashbang through onComment. The implementation filters that one comment so the required hashbang preservation holds. The vendored source cannot pass this project's lint configuration, so scoped lint verifies changed files.
+- Actual files changed: `lib/bundler/strip-comments.js`, `test/unit-tests/lib/bundler/strip-comments.test.js`, `agents/plans/module-bundler.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/bundler/strip-comments.test.js` passed (6 tests); `node run-linter.js lib/bundler/strip-comments.js test/unit-tests/lib/bundler/strip-comments.test.js` passed.
 - Blockers: None.
 
 ---
 
 ### Task 4: Specifier classification and resolution
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 1, Task 2
 **Documentation:** `agents/docs/code-style-guide.md`, `test/README.md`
 
@@ -473,19 +474,19 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the injected-filesystem resolver and tests for external, internal, missing, containment, node_modules, casing, and symlink outcomes.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: Internal names are derived from the logical path, while realpath is used only for laundering and case validation. Full-project lint remains blocked by pre-existing vendored Acorn violations; scoped lint verifies changed files.
+- Actual files changed: `lib/bundler/resolve-specifier.js`, `test/unit-tests/lib/bundler/resolve-specifier.test.js`, `agents/plans/module-bundler.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/bundler/resolve-specifier.test.js` passed (9 tests); `node run-linter.js lib/bundler/resolve-specifier.js test/unit-tests/lib/bundler/resolve-specifier.test.js` passed.
 - Blockers: None.
 
 ---
 
 ### Task 5: Graph crawl and public API
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 1, Task 2, Task 3, Task 4
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, `test/README.md`
 
@@ -602,10 +603,10 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the public module graph crawl with deterministic depth-first ordering, cycle handling, static and dynamic dependency discovery, aggregate diagnostics, and graph-level tests.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: A separate visited set prevents re-reading parse-invalid modules while the module Map preserves successful module insertion order. The sample app currently bundles 201 modules totaling 746342 stripped source bytes, rather than the earlier planning estimate. Full-project lint remains blocked by pre-existing vendored Acorn violations; scoped lint verifies changed files.
+- Actual files changed: `lib/bundler/bundle-modules.js`, `test/unit-tests/lib/bundler/bundle-modules.test.js`, `agents/plans/module-bundler.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/bundler` passed (28 tests); `node run-linter.js lib/bundler test/unit-tests/lib/bundler` passed; `node run-tests.js` passed (97 tests); `git diff --check` passed; manual sample-app bundle completed with entry `./cloudflare-server.js`, 201 modules, and 746342 source bytes. `npm test` was attempted but exits 1 before tests because lint reports pre-existing errors throughout `lib/vendor/acorn/`.
 - Blockers: None.

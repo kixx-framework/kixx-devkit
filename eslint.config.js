@@ -3,6 +3,7 @@ export default [
         ignores: [
             'node_modules/',
             'tmp/',
+            'lib/vendor/',
         ],
         languageOptions: {
             ecmaVersion: 2022,

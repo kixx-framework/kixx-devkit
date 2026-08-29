@@ -18,6 +18,8 @@ describe('CloudflareAPIClient', ({ it }) => {
             [ () => client.getWorkerVersion('worker-id'), 'requires a versionId' ],
             [ () => client.createWorkerVersion('example-worker'), 'requires a version' ],
             [ () => client.createDeployment('example-worker'), 'requires a deployment' ],
+            [ () => client.getKVNamespace(), 'requires a namespaceId' ],
+            [ () => client.createKVNamespace(), 'requires a payload' ],
             [ () => client.getD1Database(), 'requires a databaseId' ],
             [ () => client.createD1Database(), 'requires a payload' ],
             [ () => client.queryD1Database('database-id'), 'requires a query' ],
@@ -230,6 +232,69 @@ describe('CloudflareAPIClient', ({ it }) => {
 
         assert(caught, 'expected an invalid force option to be rejected');
         assertMatches('options.force must be a boolean', caught.message);
+    });
+
+    it('retrieves a Workers KV namespace with all fields', async () => {
+        await withMockTracker(async (tracker) => {
+            const namespace = {
+                id: 'namespace-id',
+                title: 'example-namespace',
+                jurisdiction: 'us',
+                supports_url_encoding: true,
+            };
+            const fetchMock = tracker.method(globalThis, 'fetch', async () => {
+                return makeApiResponse({ success: true, result: namespace });
+            });
+            const client = makeClient();
+
+            const result = await client.getKVNamespace('namespace-id');
+
+            const call = fetchMock.mock.getCall(0);
+            assertEqual(namespace, result);
+            assertEqual(
+                'https://api.cloudflare.com/client/v4/accounts/account-id/storage/kv/namespaces/namespace-id',
+                call.arguments[0].href,
+            );
+            assertEqual('GET', call.arguments[1].method);
+        });
+    });
+
+    it('creates a Workers KV namespace with a JSON request body', async () => {
+        await withMockTracker(async (tracker) => {
+            const namespace = { id: 'namespace-id', title: 'example-namespace' };
+            const fetchMock = tracker.method(globalThis, 'fetch', async () => {
+                return makeApiResponse({ success: true, result: namespace });
+            });
+            const client = makeClient();
+            const payload = {
+                title: 'example-namespace',
+                jurisdiction: 'us',
+            };
+
+            const result = await client.createKVNamespace(payload);
+
+            const call = fetchMock.mock.getCall(0);
+            const init = call.arguments[1];
+            assertEqual(namespace, result);
+            assertEqual(
+                'https://api.cloudflare.com/client/v4/accounts/account-id/storage/kv/namespaces',
+                call.arguments[0].href,
+            );
+            assertEqual('POST', init.method);
+            assertEqual('application/json', init.headers['content-type']);
+            const body = JSON.parse(init.body);
+            assertEqual('example-namespace', body.title);
+            assertEqual('us', body.jurisdiction);
+        });
+    });
+
+    it('requires a non-empty Workers KV namespace title', async () => {
+        const client = makeClient();
+
+        const caught = await catchAsyncError(() => client.createKVNamespace({ title: '' }));
+
+        assert(caught, 'expected an empty Workers KV namespace title to be rejected');
+        assertMatches('requires a payload.title', caught.message);
     });
 
     it('retrieves a D1 database with all fields', async () => {

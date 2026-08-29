@@ -18,6 +18,8 @@ describe('CloudflareAPIClient', ({ it }) => {
             [ () => client.getWorkerVersion('worker-id'), 'requires a versionId' ],
             [ () => client.createWorkerVersion('example-worker'), 'requires a version' ],
             [ () => client.createDeployment('example-worker'), 'requires a deployment' ],
+            [ () => client.getD1Database(), 'requires a databaseId' ],
+            [ () => client.createD1Database(), 'requires a payload' ],
             [ () => client.queryD1Database('database-id'), 'requires a query' ],
         ];
 
@@ -228,6 +230,64 @@ describe('CloudflareAPIClient', ({ it }) => {
 
         assert(caught, 'expected an invalid force option to be rejected');
         assertMatches('options.force must be a boolean', caught.message);
+    });
+
+    it('retrieves a D1 database with all fields', async () => {
+        await withMockTracker(async (tracker) => {
+            const database = { uuid: 'database-id', name: 'example-database' };
+            const fetchMock = tracker.method(globalThis, 'fetch', async () => {
+                return makeApiResponse({ success: true, result: database });
+            });
+            const client = makeClient();
+
+            const result = await client.getD1Database('database-id');
+
+            const call = fetchMock.mock.getCall(0);
+            assertEqual(database, result);
+            assertEqual(
+                'https://api.cloudflare.com/client/v4/accounts/account-id/d1/database/database-id',
+                call.arguments[0].href,
+            );
+            assertEqual('GET', call.arguments[1].method);
+        });
+    });
+
+    it('creates a D1 database with a JSON request body', async () => {
+        await withMockTracker(async (tracker) => {
+            const database = { uuid: 'database-id', name: 'example-database' };
+            const fetchMock = tracker.method(globalThis, 'fetch', async () => {
+                return makeApiResponse({ success: true, result: database });
+            });
+            const client = makeClient();
+            const payload = {
+                name: 'example-database',
+                jurisdiction: 'us',
+            };
+
+            const result = await client.createD1Database(payload);
+
+            const call = fetchMock.mock.getCall(0);
+            const init = call.arguments[1];
+            assertEqual(database, result);
+            assertEqual(
+                'https://api.cloudflare.com/client/v4/accounts/account-id/d1/database',
+                call.arguments[0].href,
+            );
+            assertEqual('POST', init.method);
+            assertEqual('application/json', init.headers['content-type']);
+            const body = JSON.parse(init.body);
+            assertEqual('example-database', body.name);
+            assertEqual('us', body.jurisdiction);
+        });
+    });
+
+    it('requires a non-empty D1 database name', async () => {
+        const client = makeClient();
+
+        const caught = await catchAsyncError(() => client.createD1Database({ name: '' }));
+
+        assert(caught, 'expected an empty D1 database name to be rejected');
+        assertMatches('requires a payload.name', caught.message);
     });
 
     it('serializes a parameterized D1 query', async () => {

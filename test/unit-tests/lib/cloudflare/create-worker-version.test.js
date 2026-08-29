@@ -35,7 +35,7 @@ describe('create-worker-version', ({ it }) => {
         assertEqual(0, apiClient.calls.getKVNamespace.length);
     });
 
-    it('returns resources-created and never bundles, uploads, or writes state', async () => {
+    it('returns resources-resolved and never bundles, uploads, or writes state', async () => {
         const config = makeCloudflareConfig();
         config.environments.production.DOCUMENT_STORE.databaseId = null;
 
@@ -52,8 +52,9 @@ describe('create-worker-version', ({ it }) => {
             fileSystem,
         }));
 
-        assertEqual('resources-created', result.outcome);
-        assertEqual(1, result.createdResources.length);
+        assertEqual('resources-resolved', result.outcome);
+        assertEqual(1, result.resolvedResources.length);
+        assertEqual(true, result.resolvedResources[0].created);
         assertEqual(0, bundleModules.callCount);
         assertEqual(0, apiClient.calls.createWorkerVersion.length);
         assert(!Object.prototype.hasOwnProperty.call(fileSystem.written, STATE_FILEPATH), 'expected no state file written');
@@ -404,6 +405,8 @@ function makeApiClient(implementations) {
         getWorker: [],
         getKVNamespace: [],
         getD1Database: [],
+        findKVNamespaceByName: [],
+        findD1DatabaseByName: [],
         createKVNamespace: [],
         createD1Database: [],
         createWorkerVersion: [],
@@ -422,6 +425,14 @@ function makeApiClient(implementations) {
         async getD1Database(id) {
             calls.getD1Database.push(id);
             return implementations.getD1Database ? implementations.getD1Database(id) : { uuid: id };
+        },
+        async findKVNamespaceByName(title) {
+            calls.findKVNamespaceByName.push(title);
+            return implementations.findKVNamespaceByName ? implementations.findKVNamespaceByName(title) : null;
+        },
+        async findD1DatabaseByName(name) {
+            calls.findD1DatabaseByName.push(name);
+            return implementations.findD1DatabaseByName ? implementations.findD1DatabaseByName(name) : null;
         },
         async createKVNamespace(payload) {
             calls.createKVNamespace.push(payload);

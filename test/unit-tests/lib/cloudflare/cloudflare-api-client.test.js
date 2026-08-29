@@ -20,8 +20,10 @@ describe('CloudflareAPIClient', ({ it }) => {
             [ () => client.createDeployment('example-worker'), 'requires a deployment' ],
             [ () => client.getKVNamespace(), 'requires a namespaceId' ],
             [ () => client.createKVNamespace(), 'requires a payload' ],
+            [ () => client.findKVNamespaceByName(), 'requires a title' ],
             [ () => client.getD1Database(), 'requires a databaseId' ],
             [ () => client.createD1Database(), 'requires a payload' ],
+            [ () => client.findD1DatabaseByName(), 'requires a name' ],
             [ () => client.queryD1Database('database-id'), 'requires a query' ],
         ];
 
@@ -297,6 +299,95 @@ describe('CloudflareAPIClient', ({ it }) => {
         assertMatches('requires a payload.title', caught.message);
     });
 
+    it('lists Workers KV namespaces with default pagination', async () => {
+        await withMockTracker(async (tracker) => {
+            const namespaces = [ { id: 'namespace-id', title: 'example-namespace' } ];
+            const fetchMock = tracker.method(globalThis, 'fetch', async () => {
+                return makeApiResponse({ success: true, result: namespaces });
+            });
+            const client = makeClient();
+
+            const result = await client.listKVNamespaces();
+
+            const url = fetchMock.mock.getCall(0).arguments[0];
+            assertEqual(namespaces, result);
+            assertEqual(
+                'https://api.cloudflare.com/client/v4/accounts/account-id/storage/kv/namespaces',
+                `${ url.origin }${ url.pathname }`,
+            );
+            assertEqual('1', url.searchParams.get('page'));
+            assertEqual('100', url.searchParams.get('per_page'));
+        });
+    });
+
+    it('returns an empty array when a list response omits its result', async () => {
+        const fetchMock = async () => makeApiResponse({ success: true, result: null });
+        const client = makeClient(fetchMock);
+
+        assertEqual(0, (await client.listKVNamespaces()).length);
+        assertEqual(0, (await client.listD1Databases()).length);
+    });
+
+    it('finds a Workers KV namespace by its exact title', async () => {
+        const pages = [
+            [ { id: 'other-id', title: 'example-namespace-staging' }, { id: 'wanted-id', title: 'example-namespace' } ],
+        ];
+        const client = makeClient(makePagedFetch(pages));
+
+        const namespace = await client.findKVNamespaceByName('example-namespace');
+
+        assertEqual('wanted-id', namespace.id);
+    });
+
+    it('pages through Workers KV namespaces until the title is found', async () => {
+        // A full page means more may follow; the match is on the second page.
+        const pages = [
+            makeNamespacePage(100, 'filler'),
+            [ { id: 'wanted-id', title: 'example-namespace' } ],
+        ];
+        const fetchMock = makePagedFetch(pages);
+        const client = makeClient(fetchMock);
+
+        const namespace = await client.findKVNamespaceByName('example-namespace');
+
+        assertEqual('wanted-id', namespace.id);
+        assertEqual(2, fetchMock.pagesRequested.length);
+        assertEqual('2', fetchMock.pagesRequested[1]);
+    });
+
+    it('returns null and stops paging on a short page of Workers KV namespaces', async () => {
+        const fetchMock = makePagedFetch([ makeNamespacePage(3, 'filler') ]);
+        const client = makeClient(fetchMock);
+
+        const namespace = await client.findKVNamespaceByName('missing-namespace');
+
+        assertEqual(null, namespace);
+        assertEqual(1, fetchMock.pagesRequested.length);
+    });
+
+    it('searches D1 databases by name and filters for an exact match', async () => {
+        const pages = [
+            [
+                { uuid: 'other-id', name: 'example-database-staging' },
+                { uuid: 'wanted-id', name: 'example-database' },
+            ],
+        ];
+        const fetchMock = makePagedFetch(pages);
+        const client = makeClient(fetchMock);
+
+        const database = await client.findD1DatabaseByName('example-database');
+
+        assertEqual('wanted-id', database.uuid);
+        assertEqual('example-database', fetchMock.namesRequested[0]);
+    });
+
+    it('returns null when no D1 database matches the name exactly', async () => {
+        const fetchMock = makePagedFetch([ [ { uuid: 'other-id', name: 'example-database-staging' } ] ]);
+        const client = makeClient(fetchMock);
+
+        assertEqual(null, await client.findD1DatabaseByName('example-database'));
+    });
+
     it('retrieves a D1 database with all fields', async () => {
         await withMockTracker(async (tracker) => {
             const database = { uuid: 'database-id', name: 'example-database' };
@@ -436,6 +527,23 @@ describe('CloudflareAPIClient', ({ it }) => {
         );
     });
 
+    it('carries the Cloudflare error array from a non-2xx JSON body', async () => {
+        const body = JSON.stringify({
+            messages: [],
+            result: null,
+            success: false,
+            errors: [ { code: 7502, message: "Database with name: 'example-database' already exists" } ],
+        });
+        const client = makeClient(async () => makeHttpErrorResponse(400, body));
+
+        const caught = await catchAsyncError(() => client.createD1Database({ name: 'example-database' }));
+
+        assertEqual('CloudflareApiError', caught.name);
+        assertEqual(400, caught.status);
+        assertEqual(1, caught.errors.length);
+        assertEqual(7502, caught.errors[0].code);
+    });
+
     it('reports the first Cloudflare API error message', async () => {
         await withMockTracker(async (tracker) => {
             tracker.method(globalThis, 'fetch', async () => {
@@ -520,6 +628,31 @@ function makeApiResponse(envelope) {
             return envelope;
         },
     };
+}
+
+// Serves one array per page, keyed by the `page` query parameter, and records
+// what the client asked for so pagination behavior can be asserted.
+function makePagedFetch(pages) {
+    const fetchImpl = async (url) => {
+        fetchImpl.pagesRequested.push(url.searchParams.get('page'));
+        fetchImpl.namesRequested.push(url.searchParams.get('name'));
+
+        const index = Number.parseInt(url.searchParams.get('page'), 10) - 1;
+
+        return makeApiResponse({ success: true, result: pages[index] ?? [] });
+    };
+
+    fetchImpl.pagesRequested = [];
+    fetchImpl.namesRequested = [];
+
+    return fetchImpl;
+}
+
+function makeNamespacePage(count, titlePrefix) {
+    return Array.from({ length: count }, (_value, index) => ({
+        id: `${ titlePrefix }-${ index }-id`,
+        title: `${ titlePrefix }-${ index }`,
+    }));
 }
 
 function makeHttpErrorResponse(status, body) {

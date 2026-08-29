@@ -71,8 +71,8 @@ export default class CloudflareCreateWorkerVersionCommand {
             fileSystem,
         });
 
-        if (result.outcome === 'resources-created') {
-            process.stdout.write(renderResourcesCreated(result, environment));
+        if (result.outcome === 'resources-resolved') {
+            process.stdout.write(renderResourcesResolved(result, environment));
         } else if (result.outcome === 'skipped') {
             process.stdout.write(renderSkipped(result, previousState));
         } else {
@@ -85,15 +85,20 @@ export default class CloudflareCreateWorkerVersionCommand {
     }
 }
 
-function renderResourcesCreated(result, environment) {
+function renderResourcesResolved(result, environment) {
+    const count = result.resolvedResources.length;
     const lines = [
-        `Created ${ result.createdResources.length } resource${ result.createdResources.length === 1 ? '' : 's' }. ` +
-        'Add these IDs to cloudflare-config.js, then re-run:',
+        `Resolved ${ count } resource${ count === 1 ? '' : 's' } missing an ID in cloudflare-config.js. ` +
+        'Add these IDs, then re-run:',
         '',
     ];
 
-    for (const resource of result.createdResources) {
-        lines.push(`  environments.${ environment }.${ resource.configKeyPath }`);
+    // Distinguishing the two cases matters: "already existed" tells a
+    // developer the resource predates this run, so nothing new is being
+    // billed and the id is the one their data is already in.
+    for (const resource of result.resolvedResources) {
+        const origin = resource.created ? 'created' : 'already existed';
+        lines.push(`  environments.${ environment }.${ resource.configKeyPath }    (${ origin })`);
         lines.push(`    = "${ resource.id }"`);
     }
 

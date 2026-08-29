@@ -11,12 +11,12 @@ describe('provision-resources', ({ it }) => {
             getKVNamespace: async () => ({ id: 'namespace-id' }),
         });
 
-        const { created } = await resolveResources({
+        const { resolved } = await resolveResources({
             environmentConfig: makeEnvironmentConfig(),
             apiClient,
         });
 
-        assertEqual(0, created.length);
+        assertEqual(0, resolved.length);
         assertEqual(1, apiClient.calls.getD1Database.length);
         assertEqual(2, apiClient.calls.getKVNamespace.length);
     });
@@ -64,15 +64,141 @@ describe('provision-resources', ({ it }) => {
             getKVNamespace: async () => ({ id: 'namespace-id' }),
         });
 
-        const { created } = await resolveResources({ environmentConfig: config, apiClient });
+        const { resolved } = await resolveResources({ environmentConfig: config, apiClient });
 
-        assertEqual(1, created.length);
-        assertEqual('DOCUMENT_STORE.databaseId', created[0].configKeyPath);
-        assertEqual('new-database-id', created[0].id);
+        assertEqual(1, resolved.length);
+        assertEqual('DOCUMENT_STORE.databaseId', resolved[0].configKeyPath);
+        assertEqual('new-database-id', resolved[0].id);
+        assertEqual(true, resolved[0].created);
         assertEqual('example-database', apiClient.calls.createD1Database[0].name);
     });
 
-    it('reports three created resources from one call', async () => {
+    it('adopts an existing D1 database by name instead of creating a duplicate', async () => {
+        const config = makeEnvironmentConfig();
+        config.DOCUMENT_STORE.databaseId = null;
+
+        const apiClient = makeApiClient({
+            findD1DatabaseByName: async (name) => ({ uuid: 'existing-database-id', name }),
+            getKVNamespace: async () => ({ id: 'namespace-id' }),
+        });
+
+        const { resolved } = await resolveResources({ environmentConfig: config, apiClient });
+
+        assertEqual(1, resolved.length);
+        assertEqual('existing-database-id', resolved[0].id);
+        assertEqual(false, resolved[0].created);
+        assertEqual(0, apiClient.calls.createD1Database.length);
+        assertEqual('example-database', apiClient.calls.findD1DatabaseByName[0]);
+    });
+
+    it('adopts an existing KV namespace by name instead of creating a duplicate', async () => {
+        const config = makeEnvironmentConfig();
+        config.KEY_VALUE_STORE.namespaceId = null;
+
+        const apiClient = makeApiClient({
+            getD1Database: async () => ({ uuid: 'database-id' }),
+            getKVNamespace: async () => ({ id: 'namespace-id' }),
+            findKVNamespaceByName: async (title) => ({ id: 'existing-namespace-id', title }),
+        });
+
+        const { resolved } = await resolveResources({ environmentConfig: config, apiClient });
+
+        assertEqual(1, resolved.length);
+        assertEqual('existing-namespace-id', resolved[0].id);
+        assertEqual(false, resolved[0].created);
+        assertEqual(0, apiClient.calls.createKVNamespace.length);
+        assertEqual('example-namespace', apiClient.calls.findKVNamespaceByName[0]);
+    });
+
+    it('looks the name up before every create', async () => {
+        const config = makeEnvironmentConfig();
+        config.DOCUMENT_STORE.databaseId = null;
+        config.KEY_VALUE_STORE.namespaceId = null;
+        config.CONTENT_STORE.kvNamespaceId = null;
+
+        const apiClient = makeApiClient({});
+
+        const { resolved } = await resolveResources({ environmentConfig: config, apiClient });
+
+        assertEqual(3, resolved.length);
+        assertEqual(1, apiClient.calls.findD1DatabaseByName.length);
+        assertEqual(2, apiClient.calls.findKVNamespaceByName.length);
+        assertEqual(1, apiClient.calls.createD1Database.length);
+        assertEqual(2, apiClient.calls.createKVNamespace.length);
+    });
+
+    it('translates a duplicate-name rejection into a UsageError naming the config key', async () => {
+        const config = makeEnvironmentConfig();
+        config.DOCUMENT_STORE.databaseId = null;
+
+        const apiClient = makeApiClient({
+            createD1Database: async () => {
+                throw new CloudflareApiError('Unexpected HTTP status 400 from POST', {
+                    status: 400,
+                    errors: [ { code: 7502, message: "Database with name: 'example-database' already exists" } ],
+                    method: 'POST',
+                    url: 'x',
+                });
+            },
+            getKVNamespace: async () => ({ id: 'namespace-id' }),
+        });
+
+        const caught = await catchAsyncError(() => resolveResources({ environmentConfig: config, apiClient }));
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('DOCUMENT_STORE.databaseId'), 'expected the message to name the config key');
+        assert(caught.message.includes('example-database'), 'expected the message to name the resource');
+        assertEqual('CloudflareApiError', caught.cause.name);
+    });
+
+    it('translates a duplicate KV namespace title by its error message', async () => {
+        const config = makeEnvironmentConfig();
+        config.KEY_VALUE_STORE.namespaceId = null;
+
+        const apiClient = makeApiClient({
+            getD1Database: async () => ({ uuid: 'database-id' }),
+            getKVNamespace: async () => ({ id: 'namespace-id' }),
+            createKVNamespace: async () => {
+                throw new CloudflareApiError('Unexpected HTTP status 400 from POST', {
+                    status: 400,
+                    errors: [ { code: 10014, message: 'a namespace with this account ID and title already exists' } ],
+                    method: 'POST',
+                    url: 'x',
+                });
+            },
+        });
+
+        const caught = await catchAsyncError(() => resolveResources({ environmentConfig: config, apiClient }));
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('KEY_VALUE_STORE.namespaceId'), 'expected the message to name the config key');
+    });
+
+    it('propagates an unrelated create failure unchanged', async () => {
+        const config = makeEnvironmentConfig();
+        config.DOCUMENT_STORE.databaseId = null;
+
+        const quotaError = new CloudflareApiError('over quota', {
+            status: 400,
+            errors: [ { code: 7400, message: 'account limit reached' } ],
+            method: 'POST',
+            url: 'x',
+        });
+        const apiClient = makeApiClient({
+            createD1Database: async () => {
+                throw quotaError;
+            },
+            getKVNamespace: async () => ({ id: 'namespace-id' }),
+        });
+
+        const caught = await catchAsyncError(() => resolveResources({ environmentConfig: config, apiClient }));
+
+        assertEqual(quotaError, caught);
+    });
+
+    it('reports three resolved resources from one call', async () => {
         const config = makeEnvironmentConfig();
         config.DOCUMENT_STORE.databaseId = null;
         config.KEY_VALUE_STORE.namespaceId = null;
@@ -83,17 +209,17 @@ describe('provision-resources', ({ it }) => {
             createKVNamespace: async () => ({ id: 'namespace-id' }),
         });
 
-        const { created } = await resolveResources({ environmentConfig: config, apiClient });
+        const { resolved } = await resolveResources({ environmentConfig: config, apiClient });
 
-        assertEqual(3, created.length);
+        assertEqual(3, resolved.length);
     });
 
     it('makes no calls and reports nothing for an absent config block', async () => {
         const apiClient = makeApiClient({});
 
-        const { created } = await resolveResources({ environmentConfig: {}, apiClient });
+        const { resolved } = await resolveResources({ environmentConfig: {}, apiClient });
 
-        assertEqual(0, created.length);
+        assertEqual(0, resolved.length);
         assertEqual(0, apiClient.calls.getD1Database.length);
         assertEqual(0, apiClient.calls.getKVNamespace.length);
         assertEqual(0, apiClient.calls.createD1Database.length);
@@ -143,6 +269,8 @@ function makeApiClient(implementations) {
     const calls = {
         getD1Database: [],
         getKVNamespace: [],
+        findD1DatabaseByName: [],
+        findKVNamespaceByName: [],
         createD1Database: [],
         createKVNamespace: [],
     };
@@ -155,6 +283,16 @@ function makeApiClient(implementations) {
         async getKVNamespace(id) {
             calls.getKVNamespace.push(id);
             return implementations.getKVNamespace ? implementations.getKVNamespace(id) : { id };
+        },
+        // The default is "no such resource", so a test that does not opt in
+        // exercises the create path.
+        async findD1DatabaseByName(name) {
+            calls.findD1DatabaseByName.push(name);
+            return implementations.findD1DatabaseByName ? implementations.findD1DatabaseByName(name) : null;
+        },
+        async findKVNamespaceByName(title) {
+            calls.findKVNamespaceByName.push(title);
+            return implementations.findKVNamespaceByName ? implementations.findKVNamespaceByName(title) : null;
         },
         async createD1Database(payload) {
             calls.createD1Database.push(payload);

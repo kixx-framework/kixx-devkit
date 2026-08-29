@@ -420,6 +420,22 @@ describe('CloudflareAPIClient', ({ it }) => {
         });
     });
 
+    it('throws CloudflareApiError with the real status for a non-2xx response', async () => {
+        const fetchMock = async () => makeHttpErrorResponse(404, 'not found');
+        const client = makeClient(fetchMock);
+
+        const caught = await catchAsyncError(() => client.getWorker('example-worker'));
+
+        assertEqual('CloudflareApiError', caught.name);
+        assertEqual(404, caught.status);
+        assertEqual('GET', caught.method);
+        assertEqual(0, caught.errors.length);
+        assertEqual(
+            'https://api.cloudflare.com/client/v4/accounts/account-id/workers/workers/example-worker',
+            caught.url,
+        );
+    });
+
     it('reports the first Cloudflare API error message', async () => {
         await withMockTracker(async (tracker) => {
             tracker.method(globalThis, 'fetch', async () => {
@@ -436,6 +452,22 @@ describe('CloudflareAPIClient', ({ it }) => {
             assert(caught, 'expected an error to be thrown');
             assertMatches('API error "invalid API token" from GET', caught.message);
         });
+    });
+
+    it('throws CloudflareApiError with the response status for an unsuccessful envelope', async () => {
+        const errors = [ { code: 10007, message: 'namespace not found' } ];
+        const fetchMock = async () => {
+            return makeApiResponse({ success: false, errors, result: null });
+        };
+        const client = makeClient(fetchMock);
+
+        const caught = await catchAsyncError(() => client.getWorker('example-worker'));
+
+        assertEqual('CloudflareApiError', caught.name);
+        assertEqual(200, caught.status);
+        assertEqual(1, caught.errors.length);
+        assertEqual('namespace not found', caught.errors[0].message);
+        assert(caught.errors !== errors, 'expected a defensive copy of the errors array');
     });
 
     it('reports the first Cloudflare API message when no error is provided', async () => {
@@ -472,10 +504,11 @@ describe('CloudflareAPIClient', ({ it }) => {
     });
 });
 
-function makeClient() {
+function makeClient(fetchImpl) {
     return new CloudflareAPIClient({
         accountId: 'account-id',
         apiToken: 'api-token',
+        fetch: fetchImpl,
     });
 }
 

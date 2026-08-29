@@ -266,7 +266,7 @@ commands/
 
 ### Task 1: Relocate the filesystem adapter and add writeFile
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/plans/module-bundler.md` (Task 2), `test/README.md`
 
@@ -341,19 +341,33 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Moved the adapter to `lib/file-system.js`, added `writeFile`
+  (creates the parent directory recursively, then writes UTF-8), moved its
+  test file, updated both bundler import sites, and added a note to
+  `module-bundler.md` recording the relocation.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: `grep -rn "node:fs" lib/` also matches
+  `lib/command-registry.js` (pre-existing, out of scope), in addition to the
+  two files this task's acceptance criteria named. Not a blocker — recorded so
+  a later agent does not treat it as a regression.
+- Actual files changed: `lib/file-system.js` (moved from
+  `lib/bundler/file-system.js`, plus `writeFile`), `lib/bundler/bundle-modules.js`
+  (import path), `lib/bundler/resolve-specifier.js` (import path in JSDoc),
+  `test/unit-tests/lib/file-system.test.js` (moved from
+  `test/unit-tests/lib/bundler/file-system.test.js`, plus `writeFile` tests),
+  `agents/plans/module-bundler.md` (relocation note).
+- Validation run: `node run-tests.js test/unit-tests/lib/file-system.test.js`
+  passed (5 tests); `node run-tests.js test/unit-tests/lib/bundler` passed (25
+  tests); `node run-linter.js lib/file-system.js lib/bundler test/unit-tests/lib`
+  passed with no output.
 - Blockers: None.
 
 ---
 
 ### Task 2: CloudflareApiError carrying the HTTP status
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, `lib/usage-error.js`, `lib/bundler/bundle-error.js`
 
@@ -424,19 +438,37 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `CloudflareApiError` (`status`, `errors` copied
+  defensively, `method`, `url`, plus `name`/`code`, all enumerable). Converted
+  both throw sites in `CloudflareAPIClient#fetchResult()`. Updated every
+  `@throws` tag; `queryD1Database()` now documents two `@throws` tags since its
+  non-array-result and unsuccessful-entry checks still throw a plain `Error`.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: The client did not accept an injected `fetch`, so
+  a `fetch` constructor option was added, defaulting to the global `fetch` and
+  validated with `isFunction()`. New tests inject it directly; the
+  pre-existing tests, which patch `globalThis.fetch` via `MockTracker`, were
+  left as-is since the default still resolves to the (patched) global and
+  still pass. New error-shape tests assert `caught.name === 'CloudflareApiError'`
+  rather than `instanceof`, per `test/README.md`'s stable-field preference.
+- Actual files changed: `lib/cloudflare/cloudflare-api-error.js` (new),
+  `lib/cloudflare/cloudflare-api-client.js` (injected `fetch`, both throw
+  sites, `@throws` tags),
+  `test/unit-tests/lib/cloudflare/cloudflare-api-error.test.js` (new),
+  `test/unit-tests/lib/cloudflare/cloudflare-api-client.test.js` (two new
+  tests using the injected `fetch`, `makeClient()` now accepts an optional
+  `fetchImpl`).
+- Validation run: `node run-tests.js test/unit-tests/lib/cloudflare` passed
+  (65 tests); `node run-linter.js lib/cloudflare test/unit-tests/lib/cloudflare`
+  passed with no output.
 - Blockers: None.
 
 ---
 
 ### Task 3: Canonical hashing
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `test/README.md`
 
@@ -509,19 +541,30 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `canonicalize()`, `sha256Hex()`, `hashValue()`. Recursive
+  key sort with a per-branch `seen` set for cycle detection (delete-on-exit,
+  so a DAG referencing the same object twice at sibling positions is not
+  falsely flagged). Object values that are `undefined` are dropped before the
+  final `JSON.stringify()`; array elements rely on `JSON.stringify()`'s own
+  `undefined -> null` conversion.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: `Date` instances pass through `sortKeys()`
+  untouched and are serialized by `JSON.stringify()`'s native `toJSON()` call;
+  not a documented requirement, just a side effect of treating anything not a
+  plain object/array as an opaque leaf.
+- Actual files changed: `lib/canonical-hash.js` (new),
+  `test/unit-tests/lib/canonical-hash.test.js` (new).
+- Validation run: `node run-tests.js test/unit-tests/lib/canonical-hash.test.js`
+  passed (11 tests); `node run-linter.js lib/canonical-hash.js
+  test/unit-tests/lib/canonical-hash.test.js` passed with no output.
 - Blockers: None.
 
 ---
 
 ### Task 4: Environment file reader
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 1
 **Documentation:** `agents/docs/code-style-guide.md`, `test/README.md`
 
@@ -604,19 +647,28 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `readEnvFile({ projectDirectory, environment, fileSystem })`.
+  Any `fileSystem.readFile()` rejection (missing file, or otherwise) is
+  reported as the "missing environment file" `UsageError` naming the path —
+  the plan does not ask this module to distinguish absence from other read
+  failures, unlike Task 5's state file. Values object is `Object.create(null)`
+  so a key named `__proto__` is stored as a plain own property.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: None.
+- Actual files changed: `lib/env-file.js` (new),
+  `test/unit-tests/lib/env-file.test.js` (new, with a file-local
+  `makeFileSystem(files)` helper over a path-to-contents map).
+- Validation run: `node run-tests.js test/unit-tests/lib/env-file.test.js`
+  passed (12 tests); `node run-linter.js lib/env-file.js
+  test/unit-tests/lib/env-file.test.js` passed with no output.
 - Blockers: None.
 
 ---
 
 ### Task 5: Worker version state file
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 1
 **Documentation:** `agents/docs/code-style-guide.md`, `test/README.md`
 
@@ -712,19 +764,31 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `getStateFilepath()`, `readWorkerVersionState()`,
+  `writeWorkerVersionState()`. Read validates JSON, top-level object shape,
+  and each known field's type when present; unknown keys pass through
+  untouched since the module returns the parsed object as-is rather than
+  reconstructing a filtered shape. Writer always writes the object it is
+  given (no merge) as `JSON.stringify(state, null, 4) + '\n'`.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: Used `kixx-assert`'s `isPlainObject` /
+  `isBoolean` / `isString` (no `isArray` export exists, so the array check
+  uses `Array.isArray()` directly).
+- Actual files changed: `lib/cloudflare/worker-version-state.js` (new),
+  `test/unit-tests/lib/cloudflare/worker-version-state.test.js` (new, with a
+  file-local `makeFileSystem(files)` mock recording `writeFile()` calls).
+- Validation run: `node run-tests.js
+  test/unit-tests/lib/cloudflare/worker-version-state.test.js` passed (11
+  tests); `node run-linter.js lib/cloudflare test/unit-tests/lib/cloudflare`
+  passed with no output.
 - Blockers: None.
 
 ---
 
 ### Task 6: Worker modules adapter
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 3
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/plans/module-bundler.md`, `lib/cloudflare/cloudflare-worker-version.js`, `test/README.md`
 
@@ -802,19 +866,30 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `toWorkerModules(bundle)` and `hashWorkerModules(modules)`.
+  Digest input is `name\nbyteLength\ncontent\n` per sorted module, using
+  `sha256Hex()` from Task 3 directly (no `canonicalize()`, per plan — hashing
+  megabytes of source as a JSON string would double the work).
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: The ambiguous-concatenation test needed a
+  contrived module set (a name containing `\n`) to actually exercise the
+  length delimiter — a plain `name\ncontent\n` join without a length prefix
+  turns out to already disambiguate most realistic renames, so the delimiter
+  only earns its keep against a name/content boundary shift.
+- Actual files changed: `lib/cloudflare/worker-modules.js` (new),
+  `test/unit-tests/lib/cloudflare/worker-modules.test.js` (new).
+- Validation run: `node run-tests.js
+  test/unit-tests/lib/cloudflare/worker-modules.test.js` passed (10 tests);
+  `node run-linter.js lib/cloudflare test/unit-tests/lib/cloudflare` passed
+  with no output.
 - Blockers: None.
 
 ---
 
 ### Task 7: Worker bindings assembly
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `lib/cloudflare/cloudflare-worker-version.js`, `test/README.md`
 
@@ -917,19 +992,46 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `buildWorkerBindings({ environmentConfig, secrets })`
+  covering all six sources, collision checks (ENVARS/secrets and any two
+  config blocks), the `BUILD_ID` guard, and name-sorted output.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: The plan's acceptance-criteria example error path
+  (`environments.production.DOCUMENT_STORE.bindingName`) includes the
+  environment name, but this function's documented signature is
+  `{ environmentConfig, secrets }` with no environment name available — Task
+  10's orchestrator is the only place that knows it. Error messages here name
+  paths relative to the environment block instead (`DOCUMENT_STORE.bindingName`),
+  and the module doc comment records why, so a later agent does not try to
+  thread an environment name through a function whose signature the plan
+  fixed. A null resource id throws a plain `Error`, not `UsageError`: per the
+  plan, that state means the pipeline was composed wrongly (Task 9 should
+  have stopped the run first), which is a programming error rather than a
+  user-facing config problem. **Correction (found while writing Task 10):**
+  the real sample config at `tmp/app/cloudflare-config.js` shows
+  `OBJECT_STORE.buckets` as an object map keyed by a local bucket key (e.g.
+  `{ files: { bucketName, bindingName } }`), not an array as first
+  implemented. Fixed to `Object.keys(buckets).map(...)`, with error paths
+  like `OBJECT_STORE.buckets.files.bindingName`; test and fixture config
+  updated to match.
+- Actual files changed: `lib/cloudflare/worker-bindings.js` (new),
+  `test/unit-tests/lib/cloudflare/worker-bindings.test.js` (new). Note:
+  `kixx-assert`'s `assertEqual`/`isEqual` does not deep-compare arrays (only
+  `Date`/`NaN` get special handling beyond `===`), so the order-independence
+  test compares `JSON.stringify()` output and joined name lists instead of
+  raw arrays — worth remembering for later array-returning modules' tests.
+- Validation run: `node run-tests.js test/unit-tests/lib/cloudflare/worker-bindings.test.js`
+  passed (13 tests); `node run-tests.js` (full suite) passed (164 tests);
+  `node run-linter.js lib/cloudflare test/unit-tests/lib/cloudflare` passed
+  with no output.
 - Blockers: None.
 
 ---
 
 ### Task 8: Durable Object migration planning
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `tmp/worker-versions-migrations.md`, `lib/cloudflare/cloudflare-worker-version.js`, `test/README.md`
 
@@ -1041,19 +1143,48 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `planDurableObjectMigrations({ environmentConfig,
+  recordedClasses, migrationTag })`. Configured classes are collected from
+  `CONTENT_STORE.durableObjectClassName` into a list (per the plan, ready for
+  a second source later). Declarations are applied idempotently by subject
+  (rename applies while `from` is recorded; delete while `className` is
+  recorded; transfer while `to` is not yet recorded). Any class left in the
+  working set that is not in `configuredClasses` after declarations and
+  additions throws.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: **Important consequence of the single
+  configured-class source**: since `configuredClasses` can only ever hold 0
+  or 1 entries today, and every leftover working-set item must be a member of
+  `configuredClasses` (else it throws as unaccounted), `nextClasses` is
+  mathematically bounded to 0 or 1 elements until a second class source is
+  added. Three acceptance criteria assumed a genuine multi-class scenario
+  (adding a second configured class; a rename plus a new class in one run;
+  `nextClasses` sorted with more than one element) — none are constructible
+  from real config today. Each corresponding test was adapted to the closest
+  honest equivalent (a delete freeing room for the single new class stands in
+  for "second configured class" and for "two operation kinds in one run"; the
+  sort test is a one-element case, since sorting a longer list is not
+  reachable yet). A future agent adding a second class source should revisit
+  these three tests and restore the originally-intended multi-class
+  coverage.
+- Actual files changed: `lib/cloudflare/durable-object-migrations.js` (new),
+  `test/unit-tests/lib/cloudflare/durable-object-migrations.test.js` (new,
+  including a test that feeds a plan into `CloudflareWorkerVersion`'s
+  `addNewSqliteClass()` / `renameClass()` / `deleteClass()` /
+  `transferClass()` / `setMigrationTags()` and asserts on `toJSON().migrations`).
+- Validation run: `node run-tests.js
+  test/unit-tests/lib/cloudflare/durable-object-migrations.test.js` passed
+  (17 tests); `node run-tests.js` (full suite) passed (181 tests); `node
+  run-linter.js lib/cloudflare test/unit-tests/lib/cloudflare` passed with no
+  output.
 - Blockers: None.
 
 ---
 
 ### Task 9: Resource resolution and provisioning
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 2
 **Documentation:** `agents/docs/code-style-guide.md`, `lib/cloudflare/cloudflare-api-client.js`, `test/README.md`
 
@@ -1145,19 +1276,38 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `resolveResources({ environmentConfig, apiClient })`,
+  processing `DOCUMENT_STORE`, `KEY_VALUE_STORE`, `CONTENT_STORE` (kv side
+  only). A `null` or `undefined` id creates the resource; a non-null id is
+  verified and a `CloudflareApiError` with `status === 404` becomes a
+  `UsageError` naming the dotted id path and the id; any other error
+  propagates unchanged. Every present block is processed before returning
+  (no early stop on a creation).
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: The open question from the Implementation
+  Approach (HTTP 404 vs. a 200 envelope with `success: false`) is **not yet
+  answered** — that requires Task 12's manual run against a real Cloudflare
+  account. This module assumes 404-only absence per the plan's default; if
+  Task 12 finds a 200 envelope, this module's `error.status === 404` check
+  needs to also match the observed error code.
+- Actual files changed: `lib/cloudflare/provision-resources.js` (new),
+  `test/unit-tests/lib/cloudflare/provision-resources.test.js` (new, with a
+  file-local `makeApiClient(implementations)` helper recording every call by
+  method name rather than using `MockTracker`, since a plain per-test map of
+  implementations was simpler here than mocking real client methods).
+- Validation run: `node run-tests.js
+  test/unit-tests/lib/cloudflare/provision-resources.test.js` passed (8
+  tests); `node run-tests.js` (full suite) passed (189 tests); `node
+  run-linter.js lib/cloudflare test/unit-tests/lib/cloudflare` passed with no
+  output.
 - Blockers: None.
 
 ---
 
 ### Task 10: Build ID and the orchestrator
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 1, Task 2, Task 3, Task 4, Task 5, Task 6, Task 7, Task 8, Task 9
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, `lib/cloudflare/cloudflare-worker-version.js`, `lib/bundler/bundle-modules.js`, `test/README.md`
 
@@ -1340,19 +1490,59 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `lib/cloudflare/build-id.js` (`formatBuildId()`) and
+  `lib/cloudflare/create-worker-version.js` (`createWorkerVersion()`),
+  wiring together every module from Tasks 1–9 into the documented pipeline:
+  config validation → `getWorker()` 404 check → `resolveResources()` stop →
+  read `.env`/state → build bindings/hash → bundle/hash modules → hash
+  `WORKER_VERSION` → plan migrations → change decision → build `BUILD_ID` →
+  assemble `CloudflareWorkerVersion` → upload → write state → return result.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - **Fixed a real bug found while writing this task**: Task 7's
+    `worker-bindings.js` assumed `OBJECT_STORE.buckets` was an array, but the
+    actual sample config at `tmp/app/cloudflare-config.js` has it as an
+    object map keyed by a local bucket name. Fixed in `worker-bindings.js`
+    (see Task 7's handoff for the detail) before wiring the orchestrator
+    against it.
+  - The migration-tag-rejection shape is genuinely unknown until Task 12 runs
+    against real Cloudflare. `isStaleMigrationTagError()` matches
+    conservatively: a `CloudflareApiError` whose `errors` array has an entry
+    whose `message` contains "tag" (case-insensitive). Until Task 12 records
+    the real shape, an unrelated failure during a migrated upload propagates
+    unchanged rather than being misreported as tag drift — matching the
+    plan's explicit conservatism instruction.
+  - `versionId` is read from `createWorkerVersion()`'s result `.id` field,
+    inferred from the shape `getWorker()`/`createWorker()` already use in the
+    existing client tests (`{ id, name }`); Task 12 should confirm this
+    against the real API response.
+  - `createdAt` and `buildId` are derived from one `now()` call captured
+    once at the top of the upload branch, not called twice, so a test (or a
+    real clock) can't observe two different instants within one run.
+  - Annotations are merged into the same options object as `WORKER_VERSION`
+    when constructing `CloudflareWorkerVersion`, since the class's
+    constructor takes both `compatibility_date`/etc. and `annotations` as
+    sibling options — not a merge into the `WORKER_VERSION` block itself.
+- Actual files changed: `lib/cloudflare/build-id.js` (new),
+  `lib/cloudflare/create-worker-version.js` (new),
+  `test/unit-tests/lib/cloudflare/build-id.test.js` (new),
+  `test/unit-tests/lib/cloudflare/create-worker-version.test.js` (new, 19
+  tests using a file-local `runOptions(overrides)` helper plus
+  `makeCloudflareConfig()`, `makeBundler()`, `makeFileSystem()`,
+  `makeApiClient()`); also `lib/cloudflare/worker-bindings.js` and its test
+  (the `OBJECT_STORE.buckets` fix — see Task 7's handoff).
+- Validation run: `node run-tests.js
+  test/unit-tests/lib/cloudflare/create-worker-version.test.js` passed (19
+  tests); `node run-tests.js` (full suite) passed (211 tests); `node
+  run-linter.js lib commands test` passed with no output.
 - Blockers: None.
 
 ---
 
 ### Task 11: CLI command wiring and documentation
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 10
 **Documentation:** `commands/README.md`, `commands/cloudflare/create-worker.js`, `agents/docs/code-style-guide.md`
 
@@ -1472,19 +1662,47 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added `commands/cloudflare/create-worker-version.js` (class
+  `CloudflareCreateWorkerVersionCommand`) and its `subcommands` entry in
+  `commands/cloudflare/index.js`. `requiredCloudflareConfig` deliberately
+  omitted, with a comment explaining why (matches the plan's scope note).
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: **Important gap the plan's example output
+  assumed but the Task 10 result object does not carry**: the documented
+  "created" rendering shows hash transitions (`4f2a1c… -> 8e1190…`), but
+  `CreateWorkerVersionResult` only has boolean `changes`, not the actual
+  hash strings — before or after. Rather than reopen Task 10 to add hash
+  fields to its return type, the command reads the state file itself twice:
+  once via `readWorkerVersionState()` before calling `createWorkerVersion()`
+  (captures the previous hashes, and doubles as the source for the `skipped`
+  message's last-known `versionId`/`buildId`), and once after a successful
+  `created` outcome (the freshly written state, for the new hashes). This
+  keeps `Task 10`'s orchestrator return type unchanged and keeps the command
+  "wiring" in the sense the plan intends — composing existing `lib/`
+  exports, not new business logic — but it does mean the command reads the
+  state file directly rather than solely through the orchestrator's result;
+  worth reconsidering if a later change makes the state file's shape more
+  expensive to reread twice.
+- Actual files changed: `commands/cloudflare/create-worker-version.js`
+  (new), `commands/cloudflare/index.js` (`subcommands` entry).
+- Validation run: `node kixx.js` lists `cloudflare`; `node kixx.js
+  cloudflare --help` lists `create-worker-version`; `node kixx.js cloudflare
+  create-worker-version --help` renders the usage line, all three options,
+  and required secrets; `node kixx.js cloudflare create-worker-version`
+  (run from `tmp/app`, which has a `cloudflare-config.js`) exits `1` with
+  only `The --environment option is required` and no stack trace; `node
+  run-tests.js` (full suite) passed (211 tests); `node run-linter.js
+  commands` passed with no output. The full run-the-real-thing check
+  (`node kixx.js cloudflare create-worker-version -e production` against a
+  live Cloudflare account) is Task 12's job, not this task's — not run here.
 - Blockers: None.
 
 ---
 
 ### Task 12: Manual verification against the sample application
 
-**Status:** Not started
+**Status:** Blocked
 **Depends on:** Task 11
 **Documentation:** This plan's Implementation Approach; `tmp/app/cloudflare-config.js`
 
@@ -1581,9 +1799,29 @@ node ../../kixx.js cloudflare create-worker-version -e production --deploy
 **Progress and handoff**
 
 - Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
+- Current state: Not started. Blocked, not merely deferred: there is no
+  `.kixx/secrets.json` in this repo or in `tmp/app`, so there is no
+  `cloudflare.accountId` / `cloudflare.apiToken` to authenticate with, and
+  this task requires taking real, billable actions (creating a Worker, KV
+  namespaces, and a D1 database) against a live Cloudflare account. That is
+  not something to do without the project owner's credentials and explicit
+  go-ahead.
+- Remaining: Everything described in this task — add `ENVARS` to
+  `tmp/app/cloudflare-config.js`, create `tmp/app/.env.production`, run the
+  five-command validation sequence against a real account, and answer both
+  open questions (missing-resource HTTP status; migration-tag rejection
+  shape) from what Cloudflare actually returns.
+- Decisions and discoveries: Tasks 1–11 are implemented, unit-tested (211
+  tests passing), and linted clean. `provision-resources.js` (Task 9) and
+  the migration-tag catch in `create-worker-version.js` (Task 10) both
+  currently guess at Cloudflare's real error shapes, exactly per this task's
+  two open questions — those guesses are documented as such in Tasks 9 and
+  10's handoff notes and need this task's real-account observations to
+  confirm or correct.
 - Actual files changed: None yet.
 - Validation run: None yet.
-- Blockers: None.
+- Blockers: No Cloudflare credentials configured locally
+  (`cloudflare.accountId` / `cloudflare.apiToken` in `.kixx/secrets.json`),
+  and this task performs real account-mutating actions. Needs the project
+  owner to supply credentials (or run this task themselves) and confirm
+  before proceeding.

@@ -3,9 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe } from 'kixx-test';
 import { assert, assertEqual } from 'kixx-assert';
-import fileSystem from '../../../../lib/bundler/file-system.js';
+import fileSystem from '../../../lib/file-system.js';
 
-describe('bundler file system', ({ after, before, it }) => {
+describe('file system', ({ after, before, it }) => {
     let directory;
 
     before(async () => {
@@ -39,6 +39,25 @@ describe('bundler file system', ({ after, before, it }) => {
 
         assert(caught, 'expected an error');
         assertEqual('TypeError', caught.name);
+    });
+
+    it('writes UTF-8 text, creating a missing parent directory', async () => {
+        const filepath = path.join(directory, 'nested', 'deeper', 'written.txt');
+
+        await fileSystem.writeFile(filepath, 'hello, éé');
+
+        const contents = await fsp.readFile(filepath, 'utf8');
+        assertEqual('hello, éé', contents);
+    });
+
+    it('overwrites an existing file', async () => {
+        const filepath = path.join(directory, 'overwrite.txt');
+
+        await fileSystem.writeFile(filepath, 'first');
+        await fileSystem.writeFile(filepath, 'second');
+
+        const contents = await fsp.readFile(filepath, 'utf8');
+        assertEqual('second', contents);
     });
 });
 

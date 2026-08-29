@@ -265,6 +265,10 @@ Record the actual files changed in the handoff notes.
 - Decisions and discoveries: isFile() treats ENOENT and ENOTDIR as false, while invalid path input propagates its TypeError. Full-project lint fails on pre-existing vendored Acorn sources; scoped lint verifies changed files.
 - Actual files changed: `lib/bundler/file-system.js`, `test/unit-tests/lib/bundler/file-system.test.js`, `agents/plans/module-bundler.md`.
 - Validation run: `node run-tests.js test/unit-tests/lib/bundler/file-system.test.js` passed (3 tests); `node run-linter.js lib/bundler/file-system.js test/unit-tests/lib/bundler/file-system.test.js` passed; `rg -n "node:fs" lib/bundler/` returned only `file-system.js`.
+- Update (create-worker-version Task 1): the adapter moved to `lib/file-system.js`
+  and its test to `test/unit-tests/lib/file-system.test.js`, gaining `writeFile`,
+  so it can also serve the Cloudflare worker version modules. `lib/bundler/`
+  imports it via `../file-system.js`.
 - Blockers: None.
 - Blockers: None.
 

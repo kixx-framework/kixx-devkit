@@ -179,7 +179,7 @@ Task 6 if it differs.
 
 ### Task 1: Durable Object exports on the version payload
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** This plan's Implementation Approach; `agents/docs/code-style-guide.md`; `agents/docs/code-documentation-guide.md`; https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/
 
@@ -234,15 +234,15 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] Each of the five entry shapes serializes to exactly the documented JSON.
-- [ ] Every prohibited field combination throws, naming the offending field.
-- [ ] A `renamed` entry whose target is not a live entry in the same map throws
+- [x] Each of the five entry shapes serializes to exactly the documented JSON.
+- [x] Every prohibited field combination throws, naming the offending field.
+- [x] A `renamed` entry whose target is not a live entry in the same map throws
       from `toJSON()`.
-- [ ] A version with no exports emits no `exports` key.
-- [ ] A duplicate class key throws on the second call.
-- [ ] No migration or tag method remains on the class, and `toJSON()` can no
+- [x] A version with no exports emits no `exports` key.
+- [x] A duplicate class key throws on the second call.
+- [x] No migration or tag method remains on the class, and `toJSON()` can no
       longer emit a `migrations` key.
-- [ ] `toJSON()` returns copied structures; mutating the result cannot affect
+- [x] `toJSON()` returns copied structures; mutating the result cannot affect
       the instance.
 
 **Validation**
@@ -252,19 +252,34 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - The API is a single `addExport(className, entry)`. Task 2 emits a map keyed
+    by class name, so Task 5 iterates that map and calls this once per entry.
+  - `state` is normalized: an entry omitting it is stored as `state: 'created'`,
+    so every downstream check reads one field and the emitted JSON is explicit.
+  - `type` is optional on input (validated as `durable-object` when present) and
+    always emitted, so a caller cannot mislabel an entry.
+  - Allowed fields are driven by a per-state table (`EXPORT_STATES`), so a
+    prohibited combination is rejected by name without a hand-written matrix.
+  - "Live" for the rename-target invariant means `created` or
+    `expecting-transfer`, per the plan's statement that `expecting-transfer` is
+    a live entry.
+  - `renamed_to === className` is rejected at the call site, not in `toJSON()`.
+- Actual files changed:
+  - `lib/cloudflare/cloudflare-worker-version.js`
+  - `test/unit-tests/lib/cloudflare/cloudflare-worker-version.test.js`
+- Validation run: `node run-tests.js test/unit-tests/lib/cloudflare/cloudflare-worker-version.test.js`
+  (37 passed); `npm run lint` clean.
 - Blockers: None.
 
 ---
 
 ### Task 2: Project configuration into an exports map
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** This plan's Implementation Approach, especially "Tombstone lifecycle change" and "Transfers"
 
@@ -317,16 +332,16 @@ recorded state, no diffing, no tags.
 
 **Acceptance criteria**
 
-- [ ] A configured class with no declarations projects to a single live sqlite
+- [x] A configured class with no declarations projects to a single live sqlite
       entry.
-- [ ] Each of the four declaration actions projects to its documented entry.
-- [ ] A malformed declaration throws a `UsageError` naming its index and field,
+- [x] Each of the four declaration actions projects to its documented entry.
+- [x] A malformed declaration throws a `UsageError` naming its index and field,
       matching the old module's message quality.
-- [ ] A declaration colliding with a configured live class throws.
-- [ ] No configured class and no declarations yields an empty map, not `null`
+- [x] A declaration colliding with a configured live class throws.
+- [x] No configured class and no declarations yields an empty map, not `null`
       and not a throw.
-- [ ] The returned live-class set matches the live entries in the map.
-- [ ] No tag, recorded-class, or diffing logic survives anywhere in the module.
+- [x] The returned live-class set matches the live entries in the map.
+- [x] No tag, recorded-class, or diffing logic survives anywhere in the module.
 
 **Validation**
 
@@ -335,19 +350,36 @@ recorded state, no diffing, no tags.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - Exported as `buildDurableObjectExports({ environmentConfig })`, returning
+    `{ exports, liveClasses }`. `liveClasses` is sorted and includes
+    `expecting-transfer` entries, per the plan.
+  - Live entries are emitted without an explicit `state`; Task 1's
+    `addExport()` normalizes the omission to `created`.
+  - The collision check covers declaration-versus-declaration as well as
+    declaration-versus-configured-class, since both are the same mistake.
+  - The legacy "recorded but not configured" `UsageError` is gone by design.
+    Cloudflare reconciles and reports the orphan; this is recorded in the
+    module's own documentation so it is not mistaken for a regression.
+  - `lib/cloudflare/create-worker-version.js` still imports the deleted
+    `durable-object-migrations.js`, so the full suite is red until Task 5.
+- Actual files changed:
+  - `lib/cloudflare/durable-object-exports.js` (new)
+  - `lib/cloudflare/durable-object-migrations.js` (deleted)
+  - `test/unit-tests/lib/cloudflare/durable-object-exports.test.js` (new)
+  - `test/unit-tests/lib/cloudflare/durable-object-migrations.test.js` (deleted)
+- Validation run: `node run-tests.js test/unit-tests/lib/cloudflare/durable-object-exports.test.js`
+  (12 passed); `npm run lint` clean.
 - Blockers: None.
 
 ---
 
 ### Task 3: Read deployment state and provisioned classes from the Worker record
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** This plan's Implementation Approach, especially "Determining which classes are provisioned"
 
@@ -388,13 +420,13 @@ stops inferring Cloudflare's state from a local file.
 
 **Acceptance criteria**
 
-- [ ] `deployed_on: null` reads as never deployed; a timestamp reads as deployed.
-- [ ] A prefixed `namespace_name` yields its class name.
-- [ ] An unprefixed `namespace_name` is omitted rather than throwing or being
+- [x] `deployed_on: null` reads as never deployed; a timestamp reads as deployed.
+- [x] A prefixed `namespace_name` yields its class name.
+- [x] An unprefixed `namespace_name` is omitted rather than throwing or being
       partially parsed.
-- [ ] Absent `references`, absent `durable_objects`, and an empty array all
+- [x] Absent `references`, absent `durable_objects`, and an empty array all
       yield an empty class set.
-- [ ] A class name containing an underscore round-trips correctly.
+- [x] A class name containing an underscore round-trips correctly.
 
 **Validation**
 
@@ -403,19 +435,29 @@ stops inferring Cloudflare's state from a local file.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - Exported as `readWorkerRecord(worker, workerName)` returning
+    `{ deployed, provisionedClasses }`. `workerName` is a separate argument
+    rather than read from `worker.name`, so the caller's notion of the Worker
+    name is the one used to strip the prefix.
+  - A `namespace_name` that is exactly the prefix with nothing after it yields
+    no class name, alongside the unprefixed case.
+  - `provisionedClasses` is sorted, matching Task 2's `liveClasses`.
+- Actual files changed:
+  - `lib/cloudflare/worker-record.js` (new)
+  - `test/unit-tests/lib/cloudflare/worker-record.test.js` (new)
+- Validation run: `node run-tests.js test/unit-tests/lib/cloudflare/worker-record.test.js`
+  (8 passed); `npm run lint` clean.
 - Blockers: None.
 
 ---
 
 ### Task 4: Remove Durable Object bookkeeping from the state file
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** This plan's Implementation Approach, "Why adopt `exports`"; `test/README.md`
 
@@ -453,10 +495,10 @@ invited.
 
 **Acceptance criteria**
 
-- [ ] Neither removed field appears anywhere in the module or its documentation.
-- [ ] A file containing the removed keys still reads without error.
-- [ ] Wrong types on the surviving fields still throw naming the file.
-- [ ] A round trip through write and read preserves the surviving fields exactly.
+- [x] Neither removed field appears anywhere in the module or its documentation.
+- [x] A file containing the removed keys still reads without error.
+- [x] Wrong types on the surviving fields still throw naming the file.
+- [x] A round trip through write and read preserves the surviving fields exactly.
 
 **Validation**
 
@@ -465,19 +507,28 @@ invited.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - `isStringArray()` went with `durableObjectClasses`; it had no other caller.
+  - The "known fields, not a whitelist" and "every field optional" rules are now
+    written as a comment above `validateState()` so the next agent does not
+    tighten them as drive-by work.
+  - A test covers reading a file that still carries both removed keys, proving
+    the ignore-unknown-keys behavior rather than merely asserting it.
+- Actual files changed:
+  - `lib/cloudflare/worker-version-state.js`
+  - `test/unit-tests/lib/cloudflare/worker-version-state.test.js`
+- Validation run: `node run-tests.js test/unit-tests/lib/cloudflare/worker-version-state.test.js`
+  (13 passed); `npm run lint` clean.
 - Blockers: None.
 
 ---
 
 ### Task 5: Replace the guard with the deploy policy
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 1, Task 2, Task 3, Task 4
 **Documentation:** This plan's Implementation Approach, especially "The deploy policy"
 
@@ -537,19 +588,19 @@ Creating the first version of a Durable Object Worker succeeds.
 
 **Acceptance criteria**
 
-- [ ] Introducing and binding a class with `deployed_on: null` uploads with
+- [x] Introducing and binding a class with `deployed_on: null` uploads with
       `deploy: true` without the flag, and the result reports it as forced.
-- [ ] The same case with `deployed_on` set throws a `UsageError` naming the
+- [x] The same case with `deployed_on` set throws a `UsageError` naming the
       binding, the class, and `--deploy`.
-- [ ] An explicit `deploy` deploys in both states.
-- [ ] A run needing no lifecycle change and passing no flag uploads with
+- [x] An explicit `deploy` deploys in both states.
+- [x] A run needing no lifecycle change and passing no flag uploads with
       `deploy: false`.
-- [ ] A class already in the provisioned set is not treated as introduced.
-- [ ] A run whose hashes are unchanged but whose required deployment has not
+- [x] A class already in the provisioned set is not treated as introduced.
+- [x] A run whose hashes are unchanged but whose required deployment has not
       happened still uploads.
-- [ ] A tombstone-only config edit triggers an upload.
-- [ ] The state written contains neither removed field.
-- [ ] No reference to `assertNoBindingOnIntroducedClass`, migration tags, or
+- [x] A tombstone-only config edit triggers an upload.
+- [x] The state written contains neither removed field.
+- [x] No reference to `assertNoBindingOnIntroducedClass`, migration tags, or
       100123 survives in the module.
 
 **Validation**
@@ -560,19 +611,46 @@ Creating the first version of a Durable Object Worker succeeds.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - **Change detection choice:** the exports map is folded into the existing
+    `bindingsHash` (`hashValue({ bindings, exports })`) rather than given a
+    fourth hash. This keeps the state file at eight fields and the result's
+    `changes` shape unchanged, and a tombstone-only edit still triggers an
+    upload. A test covers that case explicitly.
+  - `assertWorkerExists()` is now `fetchWorker()`, returning the record. It
+    still converts a 404 into the `create-worker` `UsageError`. One request.
+  - The deploy decision is split in two: `findUnprovisionedBoundClasses()`
+    computes the condition, `resolveDeployment()` applies the policy and is the
+    only place that throws. `resolveDeployment()` runs before the skip check, so
+    a live Worker with a missing namespace aborts rather than silently skipping.
+  - `shouldUpload` gained `unprovisionedClasses.length > 0` in place of the
+    removed `migrationPlan.operations !== null`. This is the subtle case: a
+    required deployment has not happened by definition, so it must override the
+    hash comparison.
+  - A binding on a class the exports map does not keep live is deliberately not
+    diagnosed locally — Cloudflare's own message is more precise.
+  - Result typedef: `migrations` is replaced by `forcedDeploymentClasses`
+    (`string[]|null`) and `reconciliation` (`result.exports_reconciliation ??
+    null`). `outcome` and `changes` are unchanged. Task 6 consumes both.
+  - `isStaleMigrationTagError()`, `MIGRATION_TAG_PATTERNS`,
+    `assertNoBindingOnIntroducedClass()`, `classesIntroducedBy()`, and
+    `applyMigrationOperations()` are all gone.
+  - `commands/cloudflare/create-worker-version.js` never read `result.migrations`,
+    so nothing downstream broke.
+- Actual files changed:
+  - `lib/cloudflare/create-worker-version.js`
+  - `test/unit-tests/lib/cloudflare/create-worker-version.test.js`
+- Validation run: `node run-tests.js` — 238 passed, 0 failures; `npm run lint` clean.
 - Blockers: None.
 
 ---
 
 ### Task 6: Report reconciliation and deployment to the developer
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 5
 **Documentation:** This plan's Implementation Approach, "Tombstone lifecycle change" and "Open question for Task 7"; `commands/README.md`
 
@@ -621,15 +699,15 @@ become visible rather than silent.
 
 **Acceptance criteria**
 
-- [ ] A forced deployment prints an unmissable line naming the classes and the
+- [x] A forced deployment prints an unmissable line naming the classes and the
       reason.
-- [ ] Each non-empty reconciliation section prints; empty ones are omitted.
-- [ ] `removable_entries` prints with the config key to edit.
-- [ ] `referencing_scripts` prints with its info entry.
-- [ ] An undeployed upload prints no reconciliation section and no warning about
+- [x] Each non-empty reconciliation section prints; empty ones are omitted.
+- [x] `removable_entries` prints with the config key to edit.
+- [x] `referencing_scripts` prints with its info entry.
+- [x] An undeployed upload prints no reconciliation section and no warning about
       its absence.
-- [ ] The unchanged-run output is unchanged from today.
-- [ ] The `--deploy` description reflects the new policy.
+- [x] The unchanged-run output is unchanged from today.
+- [x] The `--deploy` description reflects the new policy.
 
 **Validation**
 
@@ -639,19 +717,44 @@ become visible rather than silent.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete.
+- Remaining: Nothing. Task 7 may reopen this if the reconciliation *failure*
+  shape differs from the assumption recorded below.
+- Decisions and discoveries:
+  - `renderResourcesResolved()`, `renderSkipped()`, and `renderCreated()` are
+    now named exports of the command module so they can be unit tested as pure
+    functions. The class stays the default export; the runner is unaffected.
+  - Entry shapes inside a reconciliation section are not fully documented, so
+    `describeEntry()` prefers `class_name`/`name`/`export_name` and
+    `message`/`description`, and falls back to `JSON.stringify(entry)`. It never
+    drops an entry it does not recognize.
+  - **Assumption Task 7 must confirm:** a reconciliation *success* report is
+    read from `result.exports_reconciliation`; nothing here reads a failure
+    shape. A reconciliation failure is currently expected to surface as a thrown
+    `CloudflareApiError` from the API client, which propagates unchanged. If it
+    instead arrives as a 200 carrying `exports_reconciliation.errors`, this task
+    reopens: the command would print a success report for a failed run.
+  - `commands/README.md` documents the command contract, not per-command
+    options, so it needed no change. The only place `DURABLE_OBJECT_MIGRATIONS`
+    is described to a developer is the `durable-object-exports.js` module
+    documentation, which now carries all four declaration shapes — including
+    `transfer-away` — and the tombstone staleness behavior.
+- Actual files changed:
+  - `commands/cloudflare/create-worker-version.js`
+  - `lib/cloudflare/durable-object-exports.js` (declaration documentation)
+  - `test/unit-tests/commands/cloudflare/create-worker-version.test.js` (new)
+- Validation run: `npm test` — linter clean, 247 tests passed. Output for a
+  forced deploy, a normal deploy, an undeployed run, and a skipped run was
+  rendered and inspected by hand; the skipped and unchanged output is
+  byte-identical to today's.
 - Blockers: None.
 
 ---
 
 ### Task 7: Verify against a real Worker
 
-**Status:** Not started
+**Status:** Blocked
 **Depends on:** Task 6
 **Documentation:** This plan's Implementation Approach, "Verified behavior" and "Open question for Task 7"
 
@@ -722,9 +825,21 @@ its handoff notes.
 **Progress and handoff**
 
 - Completed: Nothing yet.
-- Current state: Not started.
+- Current state: Blocked before starting. Tasks 1-6 are complete, `npm test` is
+  clean (linter plus 247 unit tests), and the code is ready to exercise.
 - Remaining: Everything described above.
-- Decisions and discoveries: None yet.
+- Decisions and discoveries:
+  - The single most important thing to confirm is the assumption recorded in
+    Task 6's handoff notes: whether a reconciliation *failure* arrives as a
+    thrown `CloudflareApiError` or as a 200 carrying
+    `exports_reconciliation.errors`. If it is the latter, Task 6 reopens,
+    because the command would print a success report for a failed run.
+  - Also confirm the `${workerName}_${className}` namespace naming convention
+    Task 3 parses. If it does not hold, Task 3's fallback makes every class look
+    unprovisioned, which turns every run on a live Worker into a `--deploy`
+    abort rather than a silent failure.
 - Actual files changed: None yet.
 - Validation run: None yet.
-- Blockers: None.
+- Blockers: Requires live Cloudflare credentials for a disposable Worker. This
+  plan states the token used for its own probes is being rotated, so current
+  credentials must come from the user before this task can start.

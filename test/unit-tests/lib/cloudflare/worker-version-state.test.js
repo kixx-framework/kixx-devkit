@@ -15,8 +15,6 @@ const VALID_STATE = {
     modulesHash: '4f2a',
     bindingsHash: '9c1e',
     configHash: '77bd',
-    migrationTag: 'v1',
-    durableObjectClasses: [ 'ContentAddressableIndexStore' ],
 };
 
 describe('worker-version-state', ({ it }) => {
@@ -41,7 +39,8 @@ describe('worker-version-state', ({ it }) => {
         const state = await readWorkerVersionState({ projectDirectory: '/app', environment: 'production', fileSystem });
 
         assertEqual(VALID_STATE.workerName, state.workerName);
-        assertEqual(VALID_STATE.migrationTag, state.migrationTag);
+        assertEqual(VALID_STATE.versionId, state.versionId);
+        assertEqual(VALID_STATE.configHash, state.configHash);
     });
 
     it('throws a UsageError naming the path for invalid JSON', async () => {
@@ -85,15 +84,48 @@ describe('worker-version-state', ({ it }) => {
         assert(caught.message.includes('modulesHash'), 'expected the message to name the field');
     });
 
-    it('lets migrationTag be null', async () => {
+    it('lets a hash field be null', async () => {
         const filepath = '/app/.kixx/cloudflare-state.production.json';
         const fileSystem = makeFileSystem({
-            [filepath]: JSON.stringify({ ...VALID_STATE, migrationTag: null }),
+            [filepath]: JSON.stringify({ ...VALID_STATE, modulesHash: null }),
         });
 
         const state = await readWorkerVersionState({ projectDirectory: '/app', environment: 'production', fileSystem });
 
-        assertEqual(null, state.migrationTag);
+        assertEqual(null, state.modulesHash);
+    });
+
+    it('reads a file still carrying the removed Durable Object fields', async () => {
+        const filepath = '/app/.kixx/cloudflare-state.production.json';
+        const legacy = {
+            ...VALID_STATE,
+            migrationTag: 'v1',
+            durableObjectClasses: [ 'ContentAddressableIndexStore' ],
+        };
+        const fileSystem = makeFileSystem({ [filepath]: JSON.stringify(legacy) });
+
+        const state = await readWorkerVersionState({ projectDirectory: '/app', environment: 'production', fileSystem });
+
+        assertEqual('kixx-test-app', state.workerName);
+    });
+
+    it('round trips the surviving fields through a write and a read', async () => {
+        const filepath = '/app/.kixx/cloudflare-state.production.json';
+        const fileSystem = makeFileSystem({});
+
+        await writeWorkerVersionState({
+            projectDirectory: '/app',
+            environment: 'production',
+            state: VALID_STATE,
+            fileSystem,
+        });
+
+        const reread = makeFileSystem({ [filepath]: fileSystem.written[filepath] });
+        const state = await readWorkerVersionState({ projectDirectory: '/app', environment: 'production', fileSystem: reread });
+
+        for (const field of Object.keys(VALID_STATE)) {
+            assertEqual(VALID_STATE[field], state[field]);
+        }
     });
 
     it('preserves an unknown key through a read-then-write round trip', async () => {

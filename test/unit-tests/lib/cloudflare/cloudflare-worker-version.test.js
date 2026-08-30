@@ -343,78 +343,88 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
         });
     });
 
-    describe('migrations', ({ it }) => {
-        it('omits the migrations key when no operation was recorded', () => {
-            assertUndefined(makeVersion().toJSON().migrations);
+    describe('addExport()', ({ it }) => {
+        it('omits the exports key when no export was recorded', () => {
+            assertUndefined(makeVersion().toJSON().exports);
         });
 
-        it('emits every recorded operation with its tags', () => {
+        it('serializes each supported entry shape', () => {
             const version = makeVersion();
 
-            version.addNewSqliteClass('ChatRoom');
-            version.addNewClass('LegacyCounter');
-            version.deleteClass('Abandoned');
-            version.renameClass('OldName', 'NewName');
-            version.transferClass({ from: 'Counter', from_script: 'old-worker', to: 'Counter' });
-            version.setMigrationTags('v3', 'v4');
+            version.addExport('ChatRoom', { type: 'durable-object', storage: 'sqlite' });
+            version.addExport('LegacyCounter', { storage: 'legacy-kv', state: 'created' });
+            version.addExport('Abandoned', { state: 'deleted' });
+            version.addExport('OldName', { state: 'renamed', renamed_to: 'ChatRoom' });
+            version.addExport('Departed', { state: 'transferred', transferred_to: 'other-worker' });
+            version.addExport('Arriving', {
+                state: 'expecting-transfer',
+                storage: 'sqlite',
+                transfer_from: 'old-worker',
+            });
 
-            const { migrations } = version.toJSON();
+            const { exports } = version.toJSON();
 
-            assertEqual('ChatRoom', migrations.new_sqlite_classes[0]);
-            assertEqual('LegacyCounter', migrations.new_classes[0]);
-            assertEqual('Abandoned', migrations.deleted_classes[0]);
-            assertEqual('OldName', migrations.renamed_classes[0].from);
-            assertEqual('NewName', migrations.renamed_classes[0].to);
-            assertEqual('old-worker', migrations.transferred_classes[0].from_script);
-            assertEqual('v3', migrations.old_tag);
-            assertEqual('v4', migrations.new_tag);
+            assertEqual('durable-object', exports.ChatRoom.type);
+            assertEqual('sqlite', exports.ChatRoom.storage);
+            assertEqual('created', exports.ChatRoom.state);
+            assertEqual('legacy-kv', exports.LegacyCounter.storage);
+
+            assertEqual('deleted', exports.Abandoned.state);
+            assertUndefined(exports.Abandoned.storage);
+
+            assertEqual('renamed', exports.OldName.state);
+            assertEqual('ChatRoom', exports.OldName.renamed_to);
+
+            assertEqual('transferred', exports.Departed.state);
+            assertEqual('other-worker', exports.Departed.transferred_to);
+
+            assertEqual('expecting-transfer', exports.Arriving.state);
+            assertEqual('old-worker', exports.Arriving.transfer_from);
+            assertEqual('sqlite', exports.Arriving.storage);
         });
 
-        it('omits old_tag when the Worker has no prior migration tag', () => {
-            const version = makeVersion();
-
-            version.addNewSqliteClass('ChatRoom');
-            version.setMigrationTags(null, 'v1');
-
-            const { migrations } = version.toJSON();
-
-            assert(!Object.hasOwn(migrations, 'old_tag'), 'expected old_tag to be omitted');
-            assertEqual('v1', migrations.new_tag);
-        });
-
-        it('rejects a migration with no tags set', () => {
-            const version = makeVersion();
-
-            version.addNewSqliteClass('ChatRoom');
-
-            const caught = catchError(() => version.toJSON());
-
-            assert(caught, 'expected an untagged migration to be rejected');
-            assertMatches('requires migration tags', caught.message);
-        });
-
-        it('rejects an omitted oldTag but accepts an explicit null', () => {
-            const version = makeVersion();
-
-            const caught = catchError(() => version.setMigrationTags(undefined, 'v1'));
-
-            assert(caught, 'expected an omitted oldTag to be rejected');
-            assertMatches('requires an oldTag string or an explicit null', caught.message);
-
-            version.setMigrationTags(null, 'v1');
-        });
-
-        it('rejects invalid migration arguments', () => {
+        it('rejects a field the entry state does not support', () => {
             const calls = [
-                [ (v) => v.addNewClass(), 'requires a className' ],
-                [ (v) => v.addNewSqliteClass(''), 'requires a className' ],
-                [ (v) => v.deleteClass(), 'requires a className' ],
-                [ (v) => v.renameClass('Old'), 'requires a to class name' ],
-                [ (v) => v.renameClass(undefined, 'New'), 'requires a from class name' ],
-                [ (v) => v.transferClass(), 'requires a transfer' ],
-                [ (v) => v.transferClass({ from: 'A', to: 'B' }), 'requires a transfer.from_script' ],
-                [ (v) => v.setMigrationTags('v3'), 'requires a newTag' ],
-                [ (v) => v.setMigrationTags('', 'v4'), 'must be a non-empty string or null' ],
+                [ { storage: 'sqlite', renamed_to: 'Other' }, 'does not support the field "renamed_to"' ],
+                [ { storage: 'sqlite', transferred_to: 'other' }, 'does not support the field "transferred_to"' ],
+                [ { storage: 'sqlite', transfer_from: 'other' }, 'does not support the field "transfer_from"' ],
+                [ { state: 'deleted', storage: 'sqlite' }, 'does not support the field "storage"' ],
+                [
+                    { state: 'renamed', renamed_to: 'Other', storage: 'sqlite' },
+                    'does not support the field "storage"',
+                ],
+                [ { state: 'deleted', renamed_to: 'Other' }, 'does not support the field "renamed_to"' ],
+            ];
+
+            for (const [ entry, message ] of calls) {
+                const caught = catchError(() => makeVersion().addExport('ChatRoom', entry));
+
+                assert(caught, `expected ${ JSON.stringify(entry) } to be rejected`);
+                assertMatches(message, caught.message);
+            }
+        });
+
+        it('rejects invalid export arguments', () => {
+            const calls = [
+                [ (v) => v.addExport('', { storage: 'sqlite' }), 'requires a className' ],
+                [ (v) => v.addExport('ChatRoom'), 'requires an entry object' ],
+                [ (v) => v.addExport('ChatRoom', { state: 'nope' }), 'unsupported state "nope"' ],
+                [ (v) => v.addExport('ChatRoom', {}), 'requires the storage field' ],
+                [ (v) => v.addExport('ChatRoom', { storage: 'redis' }), 'storage must be one of' ],
+                [ (v) => v.addExport('ChatRoom', { state: 'renamed' }), 'requires the renamed_to field' ],
+                [ (v) => v.addExport('ChatRoom', { state: 'transferred' }), 'requires the transferred_to field' ],
+                [
+                    (v) => v.addExport('ChatRoom', { state: 'expecting-transfer', storage: 'sqlite' }),
+                    'requires the transfer_from field',
+                ],
+                [
+                    (v) => v.addExport('ChatRoom', { type: 'worker', storage: 'sqlite' }),
+                    'type must be "durable-object"',
+                ],
+                [
+                    (v) => v.addExport('ChatRoom', { state: 'renamed', renamed_to: 'ChatRoom' }),
+                    'cannot be renamed to itself',
+                ],
             ];
 
             for (const [ call, message ] of calls) {
@@ -423,6 +433,78 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
                 assert(caught, `expected rejection matching "${ message }"`);
                 assertMatches(message, caught.message);
             }
+        });
+
+        it('rejects a duplicate class name at the call site', () => {
+            const version = makeVersion();
+
+            version.addExport('ChatRoom', { storage: 'sqlite' });
+
+            const caught = catchError(() => version.addExport('ChatRoom', { state: 'deleted' }));
+
+            assert(caught, 'expected a duplicate class name to be rejected');
+            assertMatches('duplicate class name "ChatRoom"', caught.message);
+        });
+
+        it('rejects a rename whose target is not a live export', () => {
+            const version = makeVersion();
+
+            version.addExport('OldName', { state: 'renamed', renamed_to: 'NewName' });
+
+            const missing = catchError(() => version.toJSON());
+
+            assert(missing, 'expected a rename to a missing class to be rejected');
+            assertMatches('not a live export in the same map', missing.message);
+
+            version.addExport('NewName', { state: 'deleted' });
+
+            const dead = catchError(() => version.toJSON());
+
+            assert(dead, 'expected a rename to a tombstone to be rejected');
+            assertMatches('not a live export in the same map', dead.message);
+        });
+
+        it('accepts a rename into a class expecting a transfer', () => {
+            const version = makeVersion();
+
+            version.addExport('OldName', { state: 'renamed', renamed_to: 'NewName' });
+            version.addExport('NewName', {
+                state: 'expecting-transfer',
+                storage: 'sqlite',
+                transfer_from: 'old-worker',
+            });
+
+            assertEqual('NewName', version.toJSON().exports.OldName.renamed_to);
+        });
+
+        it('returns copied entries that cannot mutate the instance', () => {
+            const version = makeVersion();
+
+            version.addExport('ChatRoom', { storage: 'sqlite' });
+
+            const first = version.toJSON();
+
+            first.exports.ChatRoom.storage = 'legacy-kv';
+            first.exports.Injected = { type: 'durable-object' };
+
+            const second = version.toJSON();
+
+            assertEqual('sqlite', second.exports.ChatRoom.storage);
+            assertUndefined(second.exports.Injected);
+        });
+
+        it('can never emit a migrations key', () => {
+            const version = makeVersion();
+
+            version.addExport('ChatRoom', { storage: 'sqlite' });
+
+            assertUndefined(version.toJSON().migrations);
+            assertEqual('undefined', typeof version.addNewSqliteClass);
+            assertEqual('undefined', typeof version.addNewClass);
+            assertEqual('undefined', typeof version.deleteClass);
+            assertEqual('undefined', typeof version.renameClass);
+            assertEqual('undefined', typeof version.transferClass);
+            assertEqual('undefined', typeof version.setMigrationTags);
         });
     });
 

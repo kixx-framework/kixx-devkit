@@ -73,6 +73,14 @@ provides version-level runtime configuration. Worker-level settings such as
 observability, logpush, and the workers.dev subdomain belong to
 `cloudflare create-worker` and are not updated here.
 
+`WORKER_VERSION` accepts exactly five keys: `compatibility_date`,
+`compatibility_flags`, `limits`, `placement`, and `cache_options`. Any other
+key, including a typo such as `compatibilty_date`, is rejected with a usage
+error naming the offending configuration path. `annotations` is rejected too:
+the command generates `workers/tag` and `workers/triggered_by` itself and
+overwrites whatever `WORKER_VERSION` carries there, so an authored
+annotations block is command-owned, not a supported input.
+
 Optional application resource blocks produce bindings:
 
 | Configuration | Cloudflare binding |
@@ -208,9 +216,21 @@ The command calculates three SHA-256 hashes:
 
 It compares them with
 `.kixx/cloudflare-state.<environment>.json`. A missing state file or a changed
-hash requires an upload. `--force` also requires one. A bound Durable Object
-class whose namespace is still missing overrides an unchanged hash result so it
-cannot remain unprovisioned indefinitely.
+hash requires an upload. `--force` also requires one, and so do these:
+
+- A bound Durable Object class whose namespace is still missing. This
+  overrides an unchanged hash result so it cannot remain unprovisioned
+  indefinitely.
+- `environments.<environment>.WORKER.name` naming a different Worker than the
+  one recorded in the state file. The state file is scoped by environment, not
+  by Worker, so a retarget would otherwise leave the new Worker never
+  receiving a version while the command reports success. The previous name is
+  reported as `retargetedFrom` and printed as its own line in the command
+  output.
+- `--deploy`. An explicit deployment request always creates and deploys a new
+  version, even when every hashed input is unchanged from the last run — the
+  flag expresses an external state change that local content hashes cannot
+  represent.
 
 `BUILD_ID` is absent from every hash. It is generated after the upload decision,
 so the clock alone does not make an unchanged build appear different.
@@ -218,9 +238,6 @@ so the clock alone does not make an unchanged build appear different.
 The idempotency decision is local. The command does not compare the candidate
 payload with versions currently stored by Cloudflare. Keep the state file with
 the project when the same environment is built from multiple machines.
-
-Known idempotency and option issues are tracked in
-`../agents/plans/create-worker-version-issues.md`.
 
 ### 7. Create the version
 
@@ -263,7 +280,9 @@ of the successful upload.
 Command output identifies the environment and Worker, reports which hash groups
 changed, prints the build and version IDs, states whether deployment occurred,
 shows Durable Object reconciliation when Cloudflare returns it, and names the
-state file written.
+state file written. When the upload was triggered by a Worker retarget, an
+unmissable `RETARGETED from Worker "..."` line precedes the hash lines so an
+upload with three `unchanged` hashes does not read as a defect.
 
 ## Durable Object deployment policy
 

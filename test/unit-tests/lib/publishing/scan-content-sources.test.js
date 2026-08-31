@@ -23,7 +23,7 @@ describe('publishing/scan-content-sources', ({ after, it }) => {
     it('materializes every content convention into deterministic resources', async () => {
         const directory = await makeProject(directories, {
             'pages/page.json': JSON.stringify({
-                template: 'page.html',
+                template: 'nested/page.html',
                 partials: [
                     { id: 'z-last', filename: 'z.html' },
                     { id: 'a-first', filename: 'a.html' },
@@ -34,7 +34,7 @@ describe('publishing/scan-content-sources', ({ after, it }) => {
                 },
                 page: { title: 'Home' },
             }),
-            'pages/page.html': '<main>Home</main>',
+            'pages/nested/page.html': '<main>Home</main>',
             'pages/a.html': 'A partial',
             'pages/z.html': 'Z partial',
             'pages/a-include.html': 'A include',

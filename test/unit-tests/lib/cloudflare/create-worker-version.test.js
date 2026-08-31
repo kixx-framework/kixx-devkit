@@ -7,6 +7,7 @@ const FIXED_DATE = new Date('2026-08-29T16:49:32.000Z');
 const PROJECT_DIRECTORY = '/app';
 const ENVIRONMENT = 'production';
 const STATE_FILEPATH = '/app/.kixx/cloudflare-state.production.json';
+const APP_STATE_FILEPATH = '/app/.kixx/app-state.production.json';
 const ENVARS_FILEPATH = '/app/.env.production';
 const SECRETS_FILEPATH = '/app/.env.production.secrets';
 
@@ -59,6 +60,7 @@ describe('create-worker-version', ({ it }) => {
         assertEqual(0, bundleModules.callCount);
         assertEqual(0, apiClient.calls.createWorkerVersion.length);
         assert(!Object.prototype.hasOwnProperty.call(fileSystem.written, STATE_FILEPATH), 'expected no state file written');
+        assert(!Object.prototype.hasOwnProperty.call(fileSystem.written, APP_STATE_FILEPATH), 'expected no app state written');
     });
 
     it('throws a UsageError naming the secrets file when it is missing', async () => {
@@ -126,6 +128,7 @@ describe('create-worker-version', ({ it }) => {
         assertEqual('skipped', result.outcome);
         assertEqual(writesAfterFirstRun, apiClient.calls.createWorkerVersion.length);
         assertEqual(stateTextAfterFirstRun, fileSystem.written[STATE_FILEPATH]);
+        assert(!Object.prototype.hasOwnProperty.call(fileSystem.written, APP_STATE_FILEPATH), 'expected no app state written');
     });
 
     it('uploads with only changes.modules true when the module source changes', async () => {
@@ -292,6 +295,10 @@ describe('create-worker-version', ({ it }) => {
         assertEqual('durable-object', call.version.exports.ContentAddressableIndexStore.type);
         assertEqual('sqlite', call.version.exports.ContentAddressableIndexStore.storage);
         assertEqual(true, JSON.parse(fileSystem.written[STATE_FILEPATH]).deployed);
+
+        const appState = JSON.parse(fileSystem.written[APP_STATE_FILEPATH]);
+        assertEqual(result.buildId, appState.liveBuildId);
+        assertEqual(FIXED_DATE.toISOString(), appState.deployedAt);
     });
 
     it('aborts naming --deploy when introducing a class on a deployed Worker', async () => {
@@ -341,6 +348,10 @@ describe('create-worker-version', ({ it }) => {
         assertEqual(true, apiClient.calls.createWorkerVersion[0].options.deploy);
         assertEqual(true, result.deployed);
         assertEqual(null, result.forcedDeploymentClasses);
+
+        const appState = JSON.parse(fileSystem.written[APP_STATE_FILEPATH]);
+        assertEqual(result.buildId, appState.liveBuildId);
+        assertEqual(FIXED_DATE.toISOString(), appState.deployedAt);
     });
 
     it('does not treat an already provisioned class as introduced', async () => {
@@ -360,6 +371,7 @@ describe('create-worker-version', ({ it }) => {
         assertEqual(false, apiClient.calls.createWorkerVersion[0].options.deploy);
         assertEqual(false, result.deployed);
         assertEqual(null, result.forcedDeploymentClasses);
+        assert(!Object.prototype.hasOwnProperty.call(fileSystem.written, APP_STATE_FILEPATH), 'expected no app state written');
     });
 
     it('uploads again when the hashes match but the namespace is still missing', async () => {

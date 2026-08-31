@@ -373,7 +373,7 @@ The conventions, mirroring `DeveloperSourceScanner`:
 
 ### Task PUB-3: Validation report
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** PUB-2
 **Documentation:** None
 
@@ -409,11 +409,11 @@ task owns the operator-facing text; PUB-2 owns finding the facts.
 
 **Acceptance criteria**
 
-- [ ] A tree with several distinct problems produces one `UsageError` listing
+- [x] A tree with several distinct problems produces one `UsageError` listing
       all of them.
-- [ ] The message states that nothing was published.
-- [ ] Unmatched files render as their own section and never raise.
-- [ ] Paths are project-relative.
+- [x] The message states that nothing was published.
+- [x] Unmatched files render as their own section and never raise.
+- [x] Paths are project-relative.
 
 **Validation**
 
@@ -422,18 +422,18 @@ task owns the operator-facing text; PUB-2 owns finding the facts.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added source validation reporting that raises one `UsageError` containing every scanner problem, an explicit no-publish statement, and an optional unmatched-file section. Added independent unmatched-file formatting for successful command output. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: The scanner already provides project-relative `filepath` and fix-oriented `message` fields for every problem, so the reporter preserves scanner order and does not re-resolve paths. Unmatched-file rendering is independent from the throwing validation path and returns an empty string when every file matched.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `lib/publishing/content-source-report.js`, `test/unit-tests/lib/publishing/content-source-report.test.js`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/content-source-report.test.js` passed 5 tests; `node run-tests.js test/unit-tests/lib/publishing` passed 29 tests; `npm run lint` passed; `npm test` passed lint and all 314 tests; `git diff --check` passed.
 - Blockers: None.
 
 
 ### Task PUB-4: Publishing API client
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** The Publishing API contract in the Implementation Approach above
 
@@ -480,14 +480,14 @@ act on. Transient failures are retried; failures that will not improve are not.
 
 **Acceptance criteria**
 
-- [ ] Every endpoint in the contract has a method, with the correct method,
+- [x] Every endpoint in the contract has a method, with the correct method,
       path, media type, and body shape.
-- [ ] A `404` from a stat is a result, not an error.
-- [ ] `429` and `503` retry and then succeed; a fourth failure raises.
-- [ ] `400` and `422` raise immediately without retrying, listing every error
+- [x] A `404` from a stat is a result, not an error.
+- [x] `429` and `503` retry and then succeed; a fourth failure raises.
+- [x] `400` and `422` raise immediately without retrying, listing every error
       object from the document.
-- [ ] `401` and `403` name the secrets file and key path.
-- [ ] No test can produce the token in an error message.
+- [x] `401` and `403` name the secrets file and key path.
+- [x] No test can produce the token in an error message.
 
 **Validation**
 
@@ -497,18 +497,18 @@ act on. Transient failures are retried; failures that will not improve are not.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added authenticated stat, upload, and closure methods for every Publishing API endpoint; resource-specific raw and JSON:API payload construction; stat-404 handling; bounded jittered retries; parsed response attributes; typed errors with all JSON:API details; actionable auth guidance; and token redaction. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: The retry limit is one initial request plus at most three retries, matching the criterion that a fourth failure raises. Optional root-page routes retain a trailing slash. Retry waiting and randomness are injectable for deterministic tests. Response error details are copied only after redaction, and network causes are not attached because an arbitrary fetch error could contain the bearer token.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `lib/publishing/publishing-api-client.js`, `lib/publishing/publishing-api-error.js`, `test/unit-tests/lib/publishing/publishing-api-client.test.js`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/publishing-api-client.test.js` passed 9 tests; `node run-tests.js test/unit-tests/lib/publishing` passed 38 tests; `npm run lint` passed; `npm test` passed lint and all 323 tests; `git diff --check` passed.
 - Blockers: None.
 
 
 ### Task PUB-5: Publish pipeline
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** PUB-2, PUB-3, PUB-4
 **Documentation:** The stat-diff argument in the Implementation Approach above
 
@@ -559,14 +559,14 @@ independent of any command or deployment target.
 
 **Acceptance criteria**
 
-- [ ] An unchanged tree makes no uploads and still commits a closure.
-- [ ] A changed resource uploads; its unchanged siblings do not.
-- [ ] The committed tree contains every resource, including unchanged ones.
-- [ ] `--bootstrap` commits an empty closure first, makes no stat requests, and
+- [x] An unchanged tree makes no uploads and still commits a closure.
+- [x] A changed resource uploads; its unchanged siblings do not.
+- [x] The committed tree contains every resource, including unchanged ones.
+- [x] `--bootstrap` commits an empty closure first, makes no stat requests, and
       uploads everything.
-- [ ] `--dry-run` makes no `PUT` requests at all and reports the same diff.
-- [ ] An upload failure prevents the closure commit.
-- [ ] Concurrency never exceeds 6 in flight.
+- [x] `--dry-run` makes no `PUT` requests at all and reports the same diff.
+- [x] An upload failure prevents the closure commit.
+- [x] Concurrency never exceeds 6 in flight.
 
 **Validation**
 
@@ -579,18 +579,18 @@ independent of any command or deployment target.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the target-neutral publishing pipeline with scanner validation, server-authoritative stat diffing, six-request stat and upload pools, bootstrap and dry-run paths, complete closure construction, structured success and partial-failure results, and phase-specific failure guidance. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: Stat and upload response references, rather than locally computed sizes, populate the committed closure; local hashes are used only to decide whether an upload is required. Workers stop taking new items after the first failure and wait for already-started requests before raising. Bootstrap failures explicitly report that the empty closure was already committed. The normative scanner publishes a referenced page template under its basename beside the page pathname, even when the manifest reference includes a subdirectory; correcting this also makes the template-to-page closure mapping unambiguous.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `lib/publishing/publish-content.js`, `lib/publishing/scan-content-sources.js`, `test/unit-tests/lib/publishing/publish-content.test.js`, `test/unit-tests/lib/publishing/scan-content-sources.test.js`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/publish-content.test.js test/unit-tests/lib/publishing/scan-content-sources.test.js` passed 11 tests; `node run-tests.js test/unit-tests/lib/publishing` passed 45 tests; `npm run lint` passed; `npm test` passed lint and all 330 tests; scanning `tmp/sample-app/` returned 106 resources, zero problems, and only `templates/README.md` unmatched; `git diff --check` passed. The planned HTTP end-to-end publish was not run because this checkout has no sample-app staging environment files or provisioned Publishing API bearer token.
 - Blockers: None.
 
 
 ### Task PUB-6: Target-neutral application state
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `lib/cloudflare/worker-version-state.js` is the model for shape, validation, and failure style
 
@@ -645,12 +645,12 @@ Cloudflare state file.
 
 **Acceptance criteria**
 
-- [ ] Read returns `null` for a missing file and a validated object otherwise.
-- [ ] Invalid JSON, a non-object root, and a wrong-typed known field each raise
+- [x] Read returns `null` for a missing file and a validated object otherwise.
+- [x] Invalid JSON, a non-object root, and a wrong-typed known field each raise
       a `UsageError` naming the file.
-- [ ] An unrecognized key round-trips instead of raising.
-- [ ] Recording a publish adds to `builds` without disturbing `liveBuildId`.
-- [ ] Recording a deployment sets `liveBuildId` and `deployedAt` without
+- [x] An unrecognized key round-trips instead of raising.
+- [x] Recording a publish adds to `builds` without disturbing `liveBuildId`.
+- [x] Recording a deployment sets `liveBuildId` and `deployedAt` without
       disturbing `builds`.
 
 **Validation**
@@ -660,18 +660,18 @@ Cloudflare state file.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the environment-specific application-state path, validated reads, whole-file writes, publish and deployment record transitions, a published-build predicate, and coverage for missing, corrupt, forward-compatible, and state-preserving behavior. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: Earlier publishing-task changes remain uncommitted in the shared worktree and were preserved. Record transitions own read-modify-write behavior and retain unknown root and per-build fields. Known fields remain optional for forward compatibility but are type-checked when present.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `lib/app-state.js`, `test/unit-tests/lib/app-state.test.js`.
+- Validation run: `node run-tests.js test/unit-tests/lib/app-state.test.js` passed 16 tests; `npm run lint` passed; `npm test` passed all 346 tests; `git diff --check` passed.
 - Blockers: None.
 
 
 ### Task PUB-7: The `app publish` command
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** PUB-5, PUB-6
 **Documentation:** `commands/README.md`; `docs/create-worker-version.md` is the model for the new document
 
@@ -719,14 +719,14 @@ After this task the publishing half of this plan is complete and documented.
 
 **Acceptance criteria**
 
-- [ ] `node kixx.js` lists `app`; `node kixx.js app --help` lists `publish`;
+- [x] `node kixx.js` lists `app`; `node kixx.js app --help` lists `publish`;
       `node kixx.js app publish --help` renders options and required settings.
-- [ ] A missing `--environment`, origin, or token produces a `UsageError` naming
+- [x] A missing `--environment`, origin, or token produces a `UsageError` naming
       the file and key path, with no stack trace.
-- [ ] `--dry-run` writes nothing, locally or remotely.
-- [ ] A successful publish records the build in `.kixx/app-state.<env>.json`.
-- [ ] A failed publish records nothing.
-- [ ] `docs/publish.md` documents the options, configuration, conventions for
+- [x] `--dry-run` writes nothing, locally or remotely.
+- [x] A successful publish records the build in `.kixx/app-state.<env>.json`.
+- [x] A failed publish records nothing.
+- [x] `docs/publish.md` documents the options, configuration, conventions for
       all five source directories, the pipeline, the diff, `--bootstrap`, and the
       output.
 
@@ -740,18 +740,18 @@ After this task the publishing half of this plan is complete and documented.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the discoverable `app publish` command with all planned options, environment-scoped configuration and build-id resolution, target-neutral publish orchestration, safe app-state recording, summary and verbose output, command documentation, and README workflow links. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: PUB-5 and PUB-6 remain in the shared uncommitted worktree and were preserved. Environment resolution and the publish/state transition live in `lib/publishing/publish-application-content.js`, leaving the command as option wiring and rendering and giving PUB-10 a reusable operation. Dynamic environment paths are documented in option help and validated after parsing because static required-setting declarations cannot express them. The token is passed only to the API client and is absent from the returned result and all render inputs.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `commands/app/index.js`, `commands/app/publish.js`, `lib/publishing/publish-application-content.js`, `test/unit-tests/commands/app/publish.test.js`, `docs/publish.md`, `README.md`.
+- Validation run: `node run-tests.js test/unit-tests/commands/app` passed 11 tests; `npm run lint` passed; `npm test` passed lint and all 357 tests; `git diff --check` passed. `node kixx.js`, `node kixx.js app --help`, and `node kixx.js app publish --help` showed the new command and options. Direct CLI checks for missing environment, origin, and token returned concise exit-1 usage errors without stacks. A real zero-resource `--dry-run` completed without network or state writes. The planned sample-app HTTP sequence could not run because `tmp/sample-app/` has no staging environment files, `.kixx` publishing configuration, or bearer token.
 - Blockers: None.
 
 
 ### Task PUB-8: The `cloudflare deploy-version` command
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** PUB-6
 **Documentation:** `CloudflareApiClient#createDeployment()` in `lib/cloudflare/cloudflare-api-client.js`, currently unused
 
@@ -797,14 +797,14 @@ refused, because it takes the whole site down.
 
 **Acceptance criteria**
 
-- [ ] Deploys the named version, or the recorded one when the positional is
+- [x] Deploys the named version, or the recorded one when the positional is
       omitted.
-- [ ] Refuses a version whose build id has no publish record, naming the
+- [x] Refuses a version whose build id has no publish record, naming the
       remedy and `--force`.
-- [ ] `--force` deploys anyway.
-- [ ] A successful deployment updates `liveBuildId` and `deployedAt`.
-- [ ] A failed deployment leaves app-state untouched.
-- [ ] An unknown version id reports Cloudflare's failure as a usage error, not a
+- [x] `--force` deploys anyway.
+- [x] A successful deployment updates `liveBuildId` and `deployedAt`.
+- [x] A failed deployment leaves app-state untouched.
+- [x] An unknown version id reports Cloudflare's failure as a usage error, not a
       crash.
 
 **Validation**
@@ -816,18 +816,18 @@ refused, because it takes the whole site down.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the discoverable `cloudflare deploy-version` command, target-neutral deployment operation, Cloudflare-derived BUILD_ID guard, forced deployment path, full-traffic deployment payload, post-success app-state recording, operator output, documentation, and focused command coverage. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: PUB-6 and earlier publishing work remain uncommitted in the shared worktree and were preserved. Cloudflare's version response exposes bindings at `version.bindings`; deployment uses one 100-percent entry with the percentage strategy. App-state is read and validated before the remote mutation even under `--force`, then written only after Cloudflare accepts the deployment. Cloudflare's `created_on` is the preferred deployment timestamp, with an injected clock fallback. A 404 version lookup becomes a concise `UsageError`; unrelated Cloudflare failures retain their typed diagnostics.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `commands/cloudflare/index.js`, `commands/cloudflare/deploy-version.js`, `lib/cloudflare/deploy-worker-version.js`, `docs/deploy-version.md`, `test/unit-tests/commands/cloudflare/deploy-version.test.js`.
+- Validation run: `node run-tests.js test/unit-tests/commands/cloudflare/deploy-version.test.js` passed 10 tests; `node kixx.js cloudflare deploy-version --help` rendered the command, optional positional, options, and required secrets; `npm run lint` passed; `npm test` passed lint and all 367 tests; `git diff --check` passed.
 - Blockers: None.
 
 
 ### Task PUB-9: `create-worker-version` records the live build
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** PUB-6, PUB-8
 **Documentation:** `docs/create-worker-version.md`
 
@@ -868,11 +868,11 @@ told one. The existing command keeps its behavior otherwise.
 
 **Acceptance criteria**
 
-- [ ] A deploying run records `liveBuildId` and `deployedAt`.
-- [ ] A non-deploying run does not.
-- [ ] A forced Durable Object deployment records it.
-- [ ] A skipped run and a `resources-resolved` run record nothing.
-- [ ] Existing tests still pass unchanged in intent.
+- [x] A deploying run records `liveBuildId` and `deployedAt`.
+- [x] A non-deploying run does not.
+- [x] A forced Durable Object deployment records it.
+- [x] A skipped run and a `resources-resolved` run record nothing.
+- [x] Existing tests still pass unchanged in intent.
 
 **Validation**
 
@@ -881,18 +881,18 @@ told one. The existing command keeps its behavior otherwise.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added live-build recording after every successful deploying version creation, including automatic Durable Object provisioning, while leaving undeployed, skipped, and resource-resolution-only outcomes unchanged. Documented application-state updates and the first-deployment bootstrap window. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: Existing changes from PUB-1 through PUB-8 remain uncommitted and were preserved. The resolved `deployment.deploy` decision is the single invariant covering explicit and forced deployments. The version creation timestamp is recorded as `deployedAt`, matching the timestamp already persisted for the same create-and-deploy operation. Cloudflare version state is written before app state, so application state is never updated when the existing Cloudflare-state write fails.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `lib/cloudflare/create-worker-version.js`, `test/unit-tests/lib/cloudflare/create-worker-version.test.js`, `docs/create-worker-version.md`, `docs/publish.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/cloudflare/create-worker-version.test.js` passed 30 tests; `node run-tests.js test/unit-tests/lib/cloudflare` passed 201 tests; `npm run lint` passed; `npm test` passed lint and all 367 tests; `git diff --check` passed.
 - Blockers: None.
 
 
 ### Task PUB-10: The `cloudflare release` command
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** PUB-7, PUB-8, PUB-9
 **Documentation:** The release model in the Implementation Approach above
 
@@ -951,14 +951,14 @@ Invariants:
 
 **Acceptance criteria**
 
-- [ ] A code change creates a version, publishes under its build id, deploys it,
+- [x] A code change creates a version, publishes under its build id, deploys it,
       and records the live build, in that order.
-- [ ] A content-only change publishes onto the live build and creates no version
+- [x] A content-only change publishes onto the live build and creates no version
       and no deployment, and says so.
-- [ ] `resources-resolved` stops before publishing.
-- [ ] A publish failure leaves the created version undeployed and says so.
-- [ ] A first release with no app-state file bootstraps and reports the window.
-- [ ] `docs/release.md` documents the three phases, every outcome above, the
+- [x] `resources-resolved` stops before publishing.
+- [x] A publish failure leaves the created version undeployed and says so.
+- [x] A first release with no app-state file bootstraps and reports the window.
+- [x] `docs/release.md` documents the three phases, every outcome above, the
       build-id coupling, and the recovery for each failure point.
 
 **Validation**
@@ -972,12 +972,12 @@ Invariants:
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the discoverable `cloudflare release` command with ordered version, publish, and deployment phases; content-only and resource-resolution exits; first-release bootstrap handling; interrupted-release resumption; phase-specific output and failure recovery; documentation; and README workflow links. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: Existing PUB-1 through PUB-9 changes remain uncommitted and were preserved. Release passes `deploy: false` into ordinary version creation, publishes the returned build id, then uses the existing guarded deployment operation. Automatic Durable Object deployment is detected from the version result and bootstrap-published without a second deployment. A skipped version phase resumes a recorded undeployed version when its build differs from the recorded live build; ordinary skipped runs remain content-only. A recorded deployed live build without a publish record is treated as an interrupted first-release bootstrap and retried with bootstrap enabled. The shared version renderer accepts a release-only `deploymentPending` option so standalone command output retains its existing behavior.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `commands/cloudflare/index.js`, `commands/cloudflare/release.js`, `commands/cloudflare/create-worker-version.js`, `test/unit-tests/commands/cloudflare/release.test.js`, `docs/release.md`, `README.md`.
+- Validation run: `node run-tests.js test/unit-tests/commands/cloudflare/release.test.js` passed 8 tests; `node run-tests.js test/unit-tests/commands/cloudflare` passed 33 tests; `node kixx.js cloudflare release --help` rendered every option and required Cloudflare secret; `node kixx.js cloudflare --help` listed `release`; `npm run lint` passed; `npm test` passed lint and all 375 tests; `git diff --check` passed. The planned real Cloudflare release was not run because `tmp/sample-app/` lacks `.env.production`, `.env.production.secrets`, `.kixx/config.json`, and `.kixx/secrets.json` with provisioned credentials.
 - Blockers: None.
 
 

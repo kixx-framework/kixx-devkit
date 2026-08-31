@@ -277,6 +277,10 @@ A failed API request writes no new state. If the upload succeeds but the local
 write fails, a later run may create a duplicate version because it has no record
 of the successful upload.
 
+When the version is deployed, the command also records its `BUILD_ID` and the
+deployment timestamp in `.kixx/app-state.<environment>.json`. An undeployed,
+skipped, or resource-resolution-only run does not change application state.
+
 Command output identifies the environment and Worker, reports which hash groups
 changed, prints the build and version IDs, states whether deployment occurred,
 shows Durable Object reconciliation when Cloudflare returns it, and names the
@@ -305,6 +309,15 @@ Tombstone reconciliation may report stale entries which are safe to remove from
 being applied twice, but Cloudflare may continue reporting it until it is
 removed.
 
+The first deployment of a Worker with no published content serves a build whose
+Publishing API has no registered closure, so requests fail until content is
+bootstrapped. After the command reports the new `BUILD_ID`, run:
+
+```sh
+kixx.js app publish --environment production \
+  --build-id <BUILD_ID> --bootstrap
+```
+
 ## Sample application
 
 `tmp/sample-app/` demonstrates the expected project layout.
@@ -323,4 +336,3 @@ removed.
 At the time this document was written, packaging the sample entry succeeded and
 found 201 reachable modules. That count is descriptive rather than an invariant;
 it changes as the sample application changes.
-

@@ -137,7 +137,8 @@ export function renderSkipped(result, previousState) {
     ].join('\n');
 }
 
-export function renderCreated(result, previousState, newState, relativeStateFilepath) {
+export function renderCreated(result, previousState, newState, relativeStateFilepath, options) {
+    const { deploymentPending = false } = options ?? {};
     const lines = [
         `Environment: ${ result.environment }`,
         `Worker:      ${ result.workerName }`,
@@ -161,7 +162,7 @@ export function renderCreated(result, previousState, newState, relativeStateFile
         `Created version ${ result.versionId }`,
     );
 
-    lines.push(...renderDeployment(result));
+    lines.push(...renderDeployment(result, deploymentPending));
     lines.push(...renderReconciliation(result.reconciliation));
 
     lines.push(`Wrote ${ relativeStateFilepath }`, '');
@@ -171,8 +172,12 @@ export function renderCreated(result, previousState, newState, relativeStateFile
 
 // A developer who did not pass --deploy must never learn about a full-traffic
 // deployment from the dashboard, so this says both that it happened and why.
-function renderDeployment(result) {
+function renderDeployment(result, deploymentPending) {
     if (!result.deployed) {
+        if (deploymentPending) {
+            return [ 'Created undeployed; deployment waits for content publish' ];
+        }
+
         return [ 'Not deployed (pass --deploy)' ];
     }
 

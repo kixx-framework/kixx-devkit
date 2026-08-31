@@ -181,7 +181,7 @@ Tasks
 
 ### Task PUB-1: Content addressing and pathname rules ported into the devkit
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `tmp/sample-app/kixx/content-addressable-store/addressing.js`, `tmp/sample-app/kixx/content-addressable-store/content-layout.js`
 
@@ -234,14 +234,14 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] `canonicalize()` sorts object keys, omits `undefined` properties, rejects
+- [x] `canonicalize()` sorts object keys, omits `undefined` properties, rejects
       non-finite numbers and unsupported types, and serializes a `Date` as `{}`.
-- [ ] String and ArrayBuffer blob digests match the framework's for a fixed set
+- [x] String and ArrayBuffer blob digests match the framework's for a fixed set
       of vectors covering: empty string, ASCII, multi-byte UTF-8, nested objects
       with unsorted keys, arrays, and binary bytes.
-- [ ] `isValidPathname()` rejects uppercase, `..`, `//`, dot-prefixed segments,
+- [x] `isValidPathname()` rejects uppercase, `..`, `//`, dot-prefixed segments,
       and characters outside `[a-z0-9_.-]`.
-- [ ] The module comment names the upstream file, the pinned `FORMAT`, and the
+- [x] The module comment names the upstream file, the pinned `FORMAT`, and the
       procedure for regenerating the test vectors.
 
 **Validation**
@@ -255,18 +255,18 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added synchronous content canonicalization, domain-separated blob hashing, base32 encoding, byte sizing, pathname normalization and validation, reserved page filename checks, fixed upstream vectors, and edge-case tests. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: The devkit implementation uses `node:crypto` while preserving upstream canonicalization and base32 behavior. The upstream primitive/object `typeof` distinction is retained because assertion predicates accept boxed primitives and would change canonical output. Only logical pathname exports are ported; storage path builders remain out of scope.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `lib/publishing/addressing.js`, `lib/publishing/content-layout.js`, `test/unit-tests/lib/publishing/addressing.test.js`, `test/unit-tests/lib/publishing/content-layout.test.js`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing` passed 15 tests; `npm run lint` passed; `npm test` passed all 297 tests; a direct comparison against the upstream addressing module matched every recorded string and binary vector; `git diff --check` passed.
 - Blockers: None.
 
 
 ### Task PUB-2: Content source scanner
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** PUB-1
 **Documentation:** `tmp/sample-app/plugins/node-content-store/lib/developer-source-scanner.js` is the normative definition of these conventions
 
@@ -341,17 +341,17 @@ The conventions, mirroring `DeveloperSourceScanner`:
 
 **Acceptance criteria**
 
-- [ ] Every convention above is covered by a test over a fixture tree.
-- [ ] Each returned resource carries its type, logical pathname, payload, hash,
+- [x] Every convention above is covered by a test over a fixture tree.
+- [x] Each returned resource carries its type, logical pathname, payload, hash,
       and size.
-- [ ] Files matching no convention are returned as `unmatchedFiles`, not
+- [x] Files matching no convention are returned as `unmatchedFiles`, not
       dropped and not treated as errors.
-- [ ] Problems are returned as data: missing referenced file, empty static
+- [x] Problems are returned as data: missing referenced file, empty static
       asset, invalid pathname, reserved template filename, static asset pathname
       collision, malformed `page.json` or `email.json`, unparsable `.js`.
-- [ ] Comment stripping leaves CSS strings and `url()` contents untouched, and
+- [x] Comment stripping leaves CSS strings and `url()` contents untouched, and
       leaves a JS hashbang, string, and regex literal untouched.
-- [ ] Scanning the sample app at `tmp/sample-app/` yields no problems.
+- [x] Scanning the sample app at `tmp/sample-app/` yields no problems.
 
 **Validation**
 
@@ -362,12 +362,12 @@ The conventions, mirroring `DeveloperSourceScanner`:
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added recursive source discovery and materialization for pages, global templates, static assets, public assets, and emails; deterministic bundle ordering; project-relative unmatched-file and problem collection; JavaScript and CSS comment stripping; binary/directory/stat filesystem operations; and fixture coverage for every convention and required failure category. All acceptance criteria are satisfied.
+- Current state: Complete and validated.
+- Remaining: None.
+- Decisions and discoveries: Resources retain logical upload payloads while hashes and sizes derive from the exact canonical string or binary bytes persisted by the framework. Scanner problems and unmatched paths are project-relative data; unexpected filesystem failures still reject. Static `.js` and `.css` sources become binary payloads after stripping, while `public/` and other static files remain byte-for-byte binary. The sample app produces 106 resources: 22 each of page metadata, partials, and includes; 19 page templates; 19 static assets; and one bundle for each global template type.
+- Actual files changed: `agents/plans/publishing-and-release.md`, `lib/file-system.js`, `lib/publishing/scan-content-sources.js`, `lib/publishing/strip-asset-comments.js`, `test/unit-tests/lib/file-system.test.js`, `test/unit-tests/lib/publishing/scan-content-sources.test.js`, `test/unit-tests/lib/publishing/strip-asset-comments.test.js`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing test/unit-tests/lib/file-system.test.js` passed 32 tests; `npm test` passed lint and all 309 tests; scanning `tmp/sample-app/` returned 106 resources, zero problems, and only `templates/README.md` unmatched; every sample resource hash matched the normative upstream addressing module; `git diff --check` passed.
 - Blockers: None.
 
 

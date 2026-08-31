@@ -24,6 +24,33 @@ describe('file system', ({ after, before, it }) => {
         assertEqual('export default 1;', source);
     });
 
+    it('reads exact binary file bytes as an ArrayBuffer', async () => {
+        const filepath = path.join(directory, 'binary.bin');
+        await fsp.writeFile(filepath, Uint8Array.from([ 0, 127, 128, 255 ]));
+
+        const buffer = await fileSystem.readBinaryFile(filepath);
+
+        assert(buffer instanceof ArrayBuffer);
+        assertEqual('0,127,128,255', new Uint8Array(buffer).join(','));
+    });
+
+    it('reads directory entries with type information', async () => {
+        const entries = await fileSystem.readDirectory(directory);
+        const source = entries.find(({ name }) => name === 'source.js');
+        const childDirectory = entries.find(({ name }) => name === 'directory');
+
+        assert(source.isFile());
+        assert(childDirectory.isDirectory());
+    });
+
+    it('reads file and directory metadata', async () => {
+        const fileStats = await fileSystem.stat(path.join(directory, 'source.js'));
+        const directoryStats = await fileSystem.stat(path.join(directory, 'directory'));
+
+        assert(fileStats.isFile());
+        assert(directoryStats.isDirectory());
+    });
+
     it('distinguishes files from directories and absent paths', async () => {
         const isSourceFile = await fileSystem.isFile(path.join(directory, 'source.js'));
         const isDirectory = await fileSystem.isFile(path.join(directory, 'directory'));

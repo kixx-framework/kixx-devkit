@@ -118,6 +118,17 @@ describe('create-worker-version output', ({ describe }) => {
             assert(text.includes('still referenced by: other-worker, third-worker'), text);
         });
 
+        it('prints the class name for an { class, message } entry', () => {
+            const text = render({
+                deployed: true,
+                reconciliation: {
+                    warnings: [ { class: 'LegacyStore', message: 'tombstone is stale' } ],
+                },
+            });
+
+            assert(text.includes('LegacyStore — tombstone is stale'), text);
+        });
+
         it('falls back to the raw entry rather than dropping an unrecognized shape', () => {
             const text = render({
                 deployed: true,

@@ -264,7 +264,7 @@ function describeEntry(entry) {
     }
 
     if (entry && typeof entry === 'object') {
-        const name = entry.class_name ?? entry.name ?? entry.export_name ?? null;
+        const name = entry.class_name ?? entry.name ?? entry.export_name ?? entry.class ?? null;
         const message = entry.message ?? entry.description ?? null;
 
         if (name && message) {

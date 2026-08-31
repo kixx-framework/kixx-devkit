@@ -131,7 +131,17 @@ tool.
 
 **Severity:** Medium
 
-**Status:** Open
+**Status:** Partially fixed
+
+`entry.class` was added to the name lookup chain in `describeEntry()`, so an
+`{ class, message }` entry (`info`/`warnings`) now prints its class name
+instead of the message alone.
+
+The rest — section-aware renderers for `renamed`, `transfer_pending`, and
+`transferred`, and schema fixtures for them — is deliberately deferred until a
+Durable Object rename or transfer is actually performed, per the order of
+work. Not open, not scheduled; `describeEntry()`'s `JSON.stringify` fallback
+still covers those shapes in the meantime.
 
 ### Trigger
 

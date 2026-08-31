@@ -10,6 +10,7 @@ import {
     CLOUDFLARE_CONFIG_FILE_NAME,
     loadCloudflareConfig,
 } from './lib/cloudflare-config-loader.js';
+import { describeCloudflareAuthFailure } from './lib/cloudflare/cloudflare-auth-guidance.js';
 import {
     findMissingKeys,
     findMissingNonEmptyStringKeys,
@@ -384,7 +385,19 @@ async function main() {
         secrets: configuration.secrets,
     });
 
-    return await command.run(commandArgs.values, ...commandArgs.positionals);
+    try {
+        return await command.run(commandArgs.values, ...commandArgs.positionals);
+    } catch (error) {
+        // An authentication failure is a configuration problem, not a crash.
+        // Reported as a UsageError it prints as instructions without a stack.
+        const guidance = describeCloudflareAuthFailure(error, configuration.secretsFilepaths);
+
+        if (guidance) {
+            throw new UsageError(guidance, { cause: error });
+        }
+
+        throw error;
+    }
 }
 
 main()

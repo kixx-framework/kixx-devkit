@@ -53,6 +53,28 @@ describe('CloudflareApiError', ({ it }) => {
         assertNotEqual(errors, error.errors);
     });
 
+    it('defaults tokenStatus to null', () => {
+        const error = new CloudflareApiError('boom', {
+            status: 404,
+            method: 'GET',
+            url: 'https://example.com',
+        });
+
+        assertEqual(null, error.tokenStatus);
+    });
+
+    it('carries the token status for an authentication failure', () => {
+        const error = new CloudflareApiError('boom', {
+            status: 401,
+            method: 'GET',
+            url: 'https://example.com',
+            tokenStatus: 'invalid',
+        });
+
+        assertEqual('invalid', error.tokenStatus);
+        assert(Object.prototype.propertyIsEnumerable.call(error, 'tokenStatus'));
+    });
+
     it('preserves the message text', () => {
         const error = new CloudflareApiError('Unexpected HTTP status 404 from GET https://example.com', {
             status: 404,

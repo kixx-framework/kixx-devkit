@@ -3,6 +3,7 @@ import {
     assert,
     assertEqual,
     assertMatches,
+    isString,
 } from 'kixx-assert';
 import CloudflareAPIClient from '../../../../lib/cloudflare/cloudflare-api-client.js';
 
@@ -597,6 +598,124 @@ describe('CloudflareAPIClient', ({ it }) => {
         });
     });
 
+    it('reports a token Cloudflare accepts as valid', async () => {
+        const client = makeClient(async () => {
+            return makeVerifyResponse(200, { success: true, result: { status: 'active' } });
+        });
+
+        const verification = await client.verifyToken();
+
+        assertEqual('valid', verification.status);
+        assertEqual('active', verification.detail);
+        assertEqual(0, verification.errors.length);
+    });
+
+    it('verifies the token against the user endpoint with the bearer token', async () => {
+        const fetchMock = async (url, init) => {
+            fetchMock.url = url;
+            fetchMock.init = init;
+            return makeVerifyResponse(200, { success: true, result: { status: 'active' } });
+        };
+        const client = makeClient(fetchMock);
+
+        await client.verifyToken();
+
+        assertEqual('https://api.cloudflare.com/client/v4/user/tokens/verify', fetchMock.url.href);
+        assertEqual('GET', fetchMock.init.method);
+        assertEqual('Bearer api-token', fetchMock.init.headers.authorization);
+    });
+
+    it('reports a token Cloudflare rejects as invalid', async () => {
+        const body = { success: false, errors: [ { code: 1000, message: 'Invalid API Token' } ] };
+        const client = makeClient(async () => makeVerifyResponse(401, body));
+
+        const verification = await client.verifyToken();
+
+        assertEqual('invalid', verification.status);
+        assertEqual(null, verification.detail);
+        assertEqual(1000, verification.errors[0].code);
+    });
+
+    // A token which verifies but is no longer usable is still the user's
+    // problem to fix, so it is reported the same way as a rejected one.
+    it('reports a verified token which is not active as invalid', async () => {
+        const client = makeClient(async () => {
+            return makeVerifyResponse(200, { success: true, result: { status: 'expired' } });
+        });
+
+        const verification = await client.verifyToken();
+
+        assertEqual('invalid', verification.status);
+        assertEqual('expired', verification.detail);
+    });
+
+    it('reports an unknown token status when Cloudflare fails for another reason', async () => {
+        const client = makeClient(async () => makeVerifyResponse(500, '<html>bad gateway</html>'));
+
+        const verification = await client.verifyToken();
+
+        assertEqual('unknown', verification.status);
+        assertEqual(0, verification.errors.length);
+    });
+
+    it('reports an unknown token status when the verification request throws', async () => {
+        const client = makeClient(async () => {
+            throw new Error('network down');
+        });
+
+        const verification = await client.verifyToken();
+
+        assertEqual('unknown', verification.status);
+    });
+
+    it('marks the token invalid on an authentication failure Cloudflare will not verify', async () => {
+        let callCount = 0;
+        const client = makeClient(async (url) => {
+            callCount += 1;
+
+            if (url.pathname.endsWith('/user/tokens/verify')) {
+                return makeVerifyResponse(401, { success: false, errors: [ { code: 1000 } ] });
+            }
+
+            return makeHttpErrorResponse(401, '{"errors":[{"code":10000}]}');
+        });
+
+        const caught = await catchAsyncError(() => client.getWorker('example-worker'));
+
+        assertEqual('CloudflareApiError', caught.name);
+        assertEqual(401, caught.status);
+        assertEqual('invalid', caught.tokenStatus);
+        assertEqual(2, callCount);
+        assertMatches('Unexpected HTTP status 401 from GET', caught.message);
+    });
+
+    it('marks the token valid when only the request was refused', async () => {
+        const client = makeClient(async (url) => {
+            if (url.pathname.endsWith('/user/tokens/verify')) {
+                return makeVerifyResponse(200, { success: true, result: { status: 'active' } });
+            }
+
+            return makeHttpErrorResponse(403, 'permission denied');
+        });
+
+        const caught = await catchAsyncError(() => client.getWorker('example-worker'));
+
+        assertEqual('valid', caught.tokenStatus);
+    });
+
+    it('does not verify the token for a failure which is not an authentication failure', async () => {
+        let callCount = 0;
+        const client = makeClient(async () => {
+            callCount += 1;
+            return makeHttpErrorResponse(404, 'not found');
+        });
+
+        const caught = await catchAsyncError(() => client.getWorker('example-worker'));
+
+        assertEqual(null, caught.tokenStatus);
+        assertEqual(1, callCount);
+    });
+
     it('reports unsuccessful API envelopes without an error message', async () => {
         await withMockTracker(async (tracker) => {
             tracker.method(globalThis, 'fetch', async () => {
@@ -653,6 +772,18 @@ function makeNamespacePage(count, titlePrefix) {
         id: `${ titlePrefix }-${ index }-id`,
         title: `${ titlePrefix }-${ index }`,
     }));
+}
+
+// The verification endpoint is read with res.text(), unlike the envelope
+// helpers above, because its body may not be JSON at all.
+function makeVerifyResponse(status, body) {
+    return {
+        ok: status >= 200 && status < 300,
+        status,
+        async text() {
+            return isString(body) ? body : JSON.stringify(body);
+        },
+    };
 }
 
 function makeHttpErrorResponse(status, body) {

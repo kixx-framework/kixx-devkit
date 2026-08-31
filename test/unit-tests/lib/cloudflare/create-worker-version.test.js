@@ -462,6 +462,60 @@ describe('create-worker-version', ({ it }) => {
         assertEqual(true, result.deployed);
     });
 
+    it('uploads to the newly configured Worker when WORKER.name is retargeted', async () => {
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+
+        await createWorkerVersion(runOptions({ apiClient, fileSystem }));
+        carryStateForward(fileSystem);
+
+        const config = makeCloudflareConfig();
+        config.environments.production.WORKER.name = 'kixx-test-app-2';
+
+        const result = await createWorkerVersion(runOptions({ apiClient, fileSystem, cloudflareConfig: config }));
+
+        assertEqual('created', result.outcome);
+        assertEqual('kixx-test-app-2', result.workerName);
+        assertEqual('kixx-test-app', result.retargetedFrom);
+        assertEqual(false, result.changes.modules);
+        assertEqual(false, result.changes.bindings);
+        assertEqual(false, result.changes.config);
+        assertEqual(2, apiClient.calls.createWorkerVersion.length);
+        assertEqual('kixx-test-app-2', apiClient.calls.createWorkerVersion[1].workerName);
+    });
+
+    it('reports retargetedFrom as null when the Worker name is unchanged', async () => {
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+
+        const first = await createWorkerVersion(runOptions({ apiClient, fileSystem }));
+        assertEqual(null, first.retargetedFrom);
+
+        carryStateForward(fileSystem);
+
+        const bundleModules = makeBundler('export default 2;');
+        const second = await createWorkerVersion(runOptions({ apiClient, fileSystem, bundleModules }));
+        assertEqual(null, second.retargetedFrom);
+    });
+
+    it('uploads and deploys on an explicit --deploy even when nothing else changed', async () => {
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+
+        await createWorkerVersion(runOptions({ apiClient, fileSystem }));
+        carryStateForward(fileSystem);
+
+        const result = await createWorkerVersion(runOptions({ apiClient, fileSystem, deploy: true }));
+
+        assertEqual('created', result.outcome);
+        assertEqual(false, result.changes.modules);
+        assertEqual(false, result.changes.bindings);
+        assertEqual(false, result.changes.config);
+        assertEqual(2, apiClient.calls.createWorkerVersion.length);
+        assertEqual(true, apiClient.calls.createWorkerVersion[1].options.deploy);
+        assertEqual(true, result.deployed);
+    });
+
     it('writes no state file when createWorkerVersion() fails', async () => {
         const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({

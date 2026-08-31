@@ -127,6 +127,22 @@ describe('create-worker-version output', ({ describe }) => {
             assert(text.includes('{"unexpected":"shape"}'), text);
         });
 
+        it('prints an unmissable retarget line when retargetedFrom is set', () => {
+            const text = render({
+                workerName: 'kixx-test-app-2',
+                retargetedFrom: 'kixx-test-app',
+                changes: { modules: false, bindings: false, config: false },
+            });
+
+            assert(text.includes('RETARGETED from Worker "kixx-test-app"'), text);
+        });
+
+        it('prints no retarget line when retargetedFrom is null', () => {
+            const text = render({ retargetedFrom: null });
+
+            assert(!text.includes('RETARGETED'), text);
+        });
+
         it('keeps the hash lines and the state file line unchanged', () => {
             const text = render({ deployed: false, forcedDeploymentClasses: null });
 
@@ -148,6 +164,7 @@ function render(overrides) {
         buildId: '2026-08-29T16-49-32Z',
         versionId: 'version-id',
         deployed: false,
+        retargetedFrom: null,
         forcedDeploymentClasses: null,
         reconciliation: null,
         ...overrides,

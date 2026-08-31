@@ -141,6 +141,16 @@ export function renderCreated(result, previousState, newState, relativeStateFile
     const lines = [
         `Environment: ${ result.environment }`,
         `Worker:      ${ result.workerName }`,
+    ];
+
+    if (result.retargetedFrom) {
+        lines.push(
+            `  RETARGETED from Worker "${ result.retargetedFrom }". The hashes below compare against that ` +
+            'Worker\'s recorded state, not this one, so "unchanged" does not mean this Worker already had them.',
+        );
+    }
+
+    lines.push(
         '',
         `Bundled ${ result.moduleCount } module${ result.moduleCount === 1 ? '' : 's' }`,
         renderHashLine('modules', result.changes.modules, previousState?.modulesHash, newState.modulesHash),
@@ -149,7 +159,7 @@ export function renderCreated(result, previousState, newState, relativeStateFile
         '',
         `BUILD_ID: ${ result.buildId }`,
         `Created version ${ result.versionId }`,
-    ];
+    );
 
     lines.push(...renderDeployment(result));
     lines.push(...renderReconciliation(result.reconciliation));

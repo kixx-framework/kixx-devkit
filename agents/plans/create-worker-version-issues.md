@@ -43,7 +43,7 @@ Severity meanings:
 
 **Severity:** High
 
-**Status:** Open
+**Status:** Fixed
 
 ### Trigger
 
@@ -236,7 +236,7 @@ a separately reviewed configuration field or CLI option.
 
 **Severity:** Medium
 
-**Status:** Open
+**Status:** Fixed
 
 ### Trigger
 

@@ -12,6 +12,33 @@ Severity meanings:
 - **Low** — does not corrupt the uploaded version, but makes the interface less
   predictable or useful.
 
+## Order of work
+
+1. **CWV-001 and CWV-004 together.** Both are the same failure: exit code 0, a
+   message reporting success, and nothing created on Cloudflare. `shouldUpload`
+   is derived from hashes of local content, but both issues are cases where
+   something outside the hashed content changed — the target Worker, and the
+   deployment intent. The existing `unprovisionedClasses.length > 0` term is the
+   precedent for both fixes. One change to `shouldUpload`, two regression tests.
+
+2. **CWV-003.** Worth doing, and for a broader reason than the issue records.
+   `WORKER_VERSION` is destructured in the `CloudflareWorkerVersion`
+   constructor, so a typo such as `compatibilty_date` is dropped silently,
+   hashed, and uploaded, and the authored compatibility date never applies.
+   Annotations are one instance of a general silent-drop. Put the unknown-key
+   rejection in the constructor rather than in `create-worker-version.js`, so
+   every caller gets it. The cost is that a newly added Cloudflare field is
+   rejected until this toolkit adds it; failing loudly is the better trade here.
+
+3. **CWV-002, partially.** The severity is overstated: `describeEntry()` falls
+   back to `JSON.stringify(entry)`, so rename and transfer entries print
+   everything, only unreadably. There is one real information loss — `{ class,
+   message }` entries print only the message, because `entry.class` is absent
+   from the name lookup chain. Add `entry.class` to that chain. Defer the
+   section-aware renderers and schema fixtures until a Durable Object rename or
+   transfer is actually performed, and mark that remainder deferred rather than
+   open so it does not read as outstanding work.
+
 ## CWV-001: State for a previous Worker can suppress an upload
 
 **Severity:** High
@@ -55,11 +82,43 @@ operator knows to delete the state file or pass `--force`.
    file. This is safe but turns a condition the command can resolve into manual
    work.
 
-**Recommended fix:** Option 1. Add a `worker` change dimension or otherwise make
-`state.workerName !== workerName` force an upload. Preserve the existing three
-content hashes, state path, and compatibility with older state files. Add a unit
-test which carries state forward, changes only `WORKER.name`, and verifies that
-the new Worker receives a version.
+**Recommended fix:** Option 1. Make `state.workerName !== workerName` force an
+upload. Preserve the existing three content hashes, state path, and
+compatibility with older state files. Add a unit test which carries state
+forward, changes only `WORKER.name`, and verifies that the new Worker receives a
+version.
+
+**Decided:** Report the retarget through a separate result field, not a fourth
+`changes` dimension.
+
+`changes` is a 1:1 mirror of the three hash fields in the state file. Every key
+has a recorded counterpart and a uniform `old -> new` digest line in
+`renderCreated()`. A Worker name is an identifier, not a digest, so it would
+need its own render branch regardless of where it lives; putting it in `changes`
+buys a fourth key and a special case rather than one or the other. It also
+widens the meaning of `changes` from "hashes that differed" to "reasons we
+uploaded", which gives `deploy` (CWV-004) an equal claim to a slot and leaves
+`unprovisionedClasses` — an upload reason deliberately held outside `changes`
+today — inconsistent with both.
+
+So instead:
+
+- Add the Worker name comparison as an override term in `shouldUpload`,
+  alongside the existing `unprovisionedClasses.length > 0` term.
+- Report it through a null-or-value result field carrying the previous name,
+  such as `retargetedFrom: state.workerName`. This follows the shape already
+  set by `forcedDeploymentClasses` and its own `renderDeployment()` renderer.
+- Leave the `changes` typedef, the three-key literal in the
+  `resources-resolved` early return, and `renderHashLine()` untouched.
+
+The previous name is the fact the operator needs — it names the Worker still
+holding the version they believed they had replaced — and a test can assert on
+it rather than on a boolean.
+
+`renderCreated()` must print that retarget. When a Worker name change is the
+sole reason for an upload, the three hash lines all read `unchanged` and are
+immediately followed by `Created version ...`, which reads as a defect in the
+tool.
 
 ### Relevant code
 

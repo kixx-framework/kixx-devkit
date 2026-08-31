@@ -13,6 +13,7 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
     describe('constructor validation', ({ it }) => {
         it('rejects malformed scalar configuration', () => {
             const calls = [
+                [ { compatibilty_date: '2021-01-01' }, 'options does not support the key "compatibilty_date"' ],
                 [ { annotations: 'nope' }, 'annotations must be an object' ],
                 [ { annotations: { 'workers/nope': 'x' } }, 'does not support the key' ],
                 [ { annotations: { 'workers/tag': '' } }, 'must be a non-empty string' ],

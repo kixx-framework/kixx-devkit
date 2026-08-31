@@ -183,7 +183,7 @@ Cloudflare API schema, including `referencing_scripts` and
 
 **Severity:** Medium
 
-**Status:** Open
+**Status:** Fixed
 
 ### Trigger
 
@@ -222,6 +222,25 @@ is not.
 `cache_options` are the supported `WORKER_VERSION` keys. Fail locally on any
 other key. If authored messages are wanted later, add them deliberately through
 a separately reviewed configuration field or CLI option.
+
+**Decided:** Two checks, not one, because they guard different things.
+
+`CloudflareWorkerVersion` is a general-purpose payload builder — `annotations`
+is a legitimate constructor option for any caller, not something the class
+itself can call unsupported. Its constructor now rejects any top-level option
+key outside its own six (`annotations` included), which only catches typos
+like `compatibilty_date` for every current and future caller; it cannot see
+that `create-worker-version.js` overwrites `annotations` before the merged
+object ever reaches the constructor, so it does not by itself enforce the
+command-owned contract.
+
+That enforcement is `create-worker-version.js`'s to make, because only it
+knows `annotations` is disallowed in *its* `WORKER_VERSION` input.
+`createWorkerVersion()` now rejects any `environments.<environment>.WORKER_VERSION`
+key outside `compatibility_date`, `compatibility_flags`, `limits`, `placement`,
+`cache_options` — `annotations` included — before the merge that would
+otherwise discard it silently, with a `UsageError` naming the exact config
+path.
 
 ### Relevant code
 

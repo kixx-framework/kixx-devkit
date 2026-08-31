@@ -462,6 +462,40 @@ describe('create-worker-version', ({ it }) => {
         assertEqual(true, result.deployed);
     });
 
+    it('throws a UsageError naming an unsupported WORKER_VERSION key, including annotations', async () => {
+        const bundleModules = makeBundler('export default 1;');
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+
+        const withAnnotations = makeCloudflareConfig();
+        withAnnotations.environments.production.WORKER_VERSION.annotations = { 'workers/message': 'hi' };
+
+        const caughtAnnotations = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ apiClient, bundleModules, cloudflareConfig: withAnnotations }));
+        });
+
+        assert(caughtAnnotations, 'expected an error to be thrown');
+        assertEqual('UsageError', caughtAnnotations.name);
+        assert(
+            caughtAnnotations.message.includes('environments.production.WORKER_VERSION.annotations'),
+            'expected the message to name the offending path',
+        );
+        assertEqual(0, apiClient.calls.createWorkerVersion.length);
+
+        const withTypo = makeCloudflareConfig();
+        withTypo.environments.production.WORKER_VERSION.compatibilty_date = '2026-08-01';
+
+        const caughtTypo = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ apiClient, bundleModules, cloudflareConfig: withTypo }));
+        });
+
+        assert(caughtTypo, 'expected an error to be thrown');
+        assertEqual('UsageError', caughtTypo.name);
+        assert(
+            caughtTypo.message.includes('environments.production.WORKER_VERSION.compatibilty_date'),
+            'expected the message to name the offending path',
+        );
+    });
+
     it('uploads to the newly configured Worker when WORKER.name is retargeted', async () => {
         const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });

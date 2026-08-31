@@ -6,10 +6,7 @@ import CloudflareWorkerVersion from '../../../../lib/cloudflare/cloudflare-worke
 
 describe('worker-bindings', ({ it }) => {
     it('produces the expected binding set from a full sample environment', () => {
-        const bindings = buildWorkerBindings({
-            environmentConfig: makeEnvironmentConfig(),
-            secrets: { API_SECRET: 'shh' },
-        });
+        const bindings = build({ secrets: { API_SECRET: 'shh' } });
 
         const byType = groupByType(bindings);
 
@@ -17,15 +14,45 @@ describe('worker-bindings', ({ it }) => {
         assertEqual(2, byType.kv_namespace.length);
         assertEqual(1, byType.durable_object_namespace.length);
         assertEqual(1, byType.r2_bucket.length);
+        // TRUST_PROXY, plus the injected ENVIRONMENT.
         assertEqual(2, byType.plain_text.length);
         assertEqual(1, byType.secret_text.length);
     });
 
-    it('never includes BUILD_ID even with unrelated ENVARS and secrets', () => {
-        const bindings = buildWorkerBindings({
-            environmentConfig: makeEnvironmentConfig(),
+    it('binds the plain file as plain_text and the secrets file as secret_text', () => {
+        const bindings = build({
+            envars: { TRUST_PROXY: 'false' },
             secrets: { API_SECRET: 'shh' },
         });
+
+        const byName = groupByName(bindings);
+
+        assertEqual('plain_text', byName.TRUST_PROXY.type);
+        assertEqual('false', byName.TRUST_PROXY.text);
+        assertEqual('secret_text', byName.API_SECRET.type);
+        assertEqual('shh', byName.API_SECRET.text);
+    });
+
+    it('binds ENVIRONMENT from the environment name, ignoring the value in the plain file', () => {
+        const bindings = build({ envars: { ENVIRONMENT: 'development' } });
+
+        const environmentBindings = bindings.filter((binding) => binding.name === 'ENVIRONMENT');
+
+        assertEqual(1, environmentBindings.length);
+        assertEqual('plain_text', environmentBindings[0].type);
+        assertEqual('production', environmentBindings[0].text);
+    });
+
+    it('binds ENVIRONMENT even when the plain file omits it', () => {
+        const bindings = build({ environmentConfig: {}, envars: {} });
+
+        assertEqual(1, bindings.length);
+        assertEqual('ENVIRONMENT', bindings[0].name);
+        assertEqual('production', bindings[0].text);
+    });
+
+    it('never includes BUILD_ID even with unrelated envars and secrets', () => {
+        const bindings = build({ secrets: { API_SECRET: 'shh' } });
 
         assert(!bindings.some((binding) => binding.name === 'BUILD_ID'), 'expected no BUILD_ID binding');
     });
@@ -34,22 +61,23 @@ describe('worker-bindings', ({ it }) => {
         const config = makeEnvironmentConfig();
         config.OBJECT_STORE = { buckets: {} };
 
-        const bindings = buildWorkerBindings({ environmentConfig: config, secrets: {} });
+        const bindings = build({ environmentConfig: config });
 
         assert(!bindings.some((binding) => binding.type === 'r2_bucket'), 'expected no r2_bucket bindings');
     });
 
-    it('omits every block independently and returns an empty array when all are absent', () => {
-        const bindings = buildWorkerBindings({ environmentConfig: {}, secrets: {} });
+    it('omits every config block independently', () => {
+        const bindings = build({ environmentConfig: {}, envars: {}, secrets: {} });
 
-        assertEqual(0, bindings.length);
+        assertEqual(1, bindings.length);
+        assertEqual('ENVIRONMENT', bindings[0].name);
     });
 
     it('throws a UsageError naming the config path for a missing required field', () => {
         const config = makeEnvironmentConfig();
         delete config.DOCUMENT_STORE.bindingName;
 
-        const caught = catchError(() => buildWorkerBindings({ environmentConfig: config, secrets: {} }));
+        const caught = catchError(() => build({ environmentConfig: config }));
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
@@ -60,52 +88,51 @@ describe('worker-bindings', ({ it }) => {
         const config = makeEnvironmentConfig();
         config.DOCUMENT_STORE.databaseId = null;
 
-        const caught = catchError(() => buildWorkerBindings({ environmentConfig: config, secrets: {} }));
+        const caught = catchError(() => build({ environmentConfig: config }));
 
         assert(caught, 'expected an error to be thrown');
     });
 
-    it('throws a UsageError naming the key and type for a non-string ENVARS value', () => {
-        const config = makeEnvironmentConfig();
-        config.ENVARS.LOG_LEVEL = 5;
-
-        const caught = catchError(() => buildWorkerBindings({ environmentConfig: config, secrets: {} }));
+    it('throws naming the plain file when it declares BUILD_ID', () => {
+        const caught = catchError(() => build({ envars: { BUILD_ID: 'nope' } }));
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
-        assert(caught.message.includes('LOG_LEVEL'), 'expected the message to name the key');
-        assert(caught.message.includes('number'), 'expected the message to name the type');
+        assert(caught.message.includes('.env.production'), 'expected the message to name the file');
     });
 
-    it('throws when ENVARS declares BUILD_ID', () => {
-        const config = makeEnvironmentConfig();
-        config.ENVARS.BUILD_ID = 'nope';
-
-        const caught = catchError(() => buildWorkerBindings({ environmentConfig: config, secrets: {} }));
+    it('throws naming the secrets file when it declares BUILD_ID', () => {
+        const caught = catchError(() => build({ secrets: { BUILD_ID: 'nope' } }));
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('.env.production.secrets'), 'expected the message to name the file');
     });
 
-    it('throws naming both sources for a name in both ENVARS and secrets', () => {
-        const config = makeEnvironmentConfig();
-        config.ENVARS.API_SECRET = 'in-envars';
-
+    it('throws naming both files for a name written in both of them', () => {
         const caught = catchError(() => {
-            return buildWorkerBindings({ environmentConfig: config, secrets: { API_SECRET: 'in-dotenv' } });
+            return build({ envars: { API_SECRET: 'plain' }, secrets: { API_SECRET: 'secret' } });
         });
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
-        assert(caught.message.includes('ENVARS'), 'expected the message to name ENVARS');
-        assert(caught.message.includes('.env'), 'expected the message to name .env');
+        assert(caught.message.includes('.env.production'), 'expected the message to name the plain file');
+        assert(caught.message.includes('.env.production.secrets'), 'expected the message to name the secrets file');
+    });
+
+    it('throws naming both sources for a dotenv name colliding with a config binding name', () => {
+        const caught = catchError(() => build({ secrets: { DOCUMENT_STORE: 'collides' } }));
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('DOCUMENT_STORE'), 'expected the message to name DOCUMENT_STORE');
     });
 
     it('throws naming both sources for a duplicate name across two config blocks', () => {
         const config = makeEnvironmentConfig();
         config.KEY_VALUE_STORE.bindingName = config.DOCUMENT_STORE.bindingName;
 
-        const caught = catchError(() => buildWorkerBindings({ environmentConfig: config, secrets: {} }));
+        const caught = catchError(() => build({ environmentConfig: config }));
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
@@ -116,16 +143,15 @@ describe('worker-bindings', ({ it }) => {
     it('sorts the result by name regardless of input key order', () => {
         const config = makeEnvironmentConfig();
 
-        const bindingsOne = buildWorkerBindings({ environmentConfig: config, secrets: { API_SECRET: 'shh' } });
+        const bindingsOne = build({ environmentConfig: config, secrets: { API_SECRET: 'shh' } });
 
         const reordered = {
-            ENVARS: config.ENVARS,
             OBJECT_STORE: config.OBJECT_STORE,
             CONTENT_STORE: config.CONTENT_STORE,
             KEY_VALUE_STORE: config.KEY_VALUE_STORE,
             DOCUMENT_STORE: config.DOCUMENT_STORE,
         };
-        const bindingsTwo = buildWorkerBindings({ environmentConfig: reordered, secrets: { API_SECRET: 'shh' } });
+        const bindingsTwo = build({ environmentConfig: reordered, secrets: { API_SECRET: 'shh' } });
 
         assertEqual(JSON.stringify(bindingsOne), JSON.stringify(bindingsTwo));
 
@@ -135,21 +161,16 @@ describe('worker-bindings', ({ it }) => {
     });
 
     it('produces a secret_text binding with an empty text for an empty-string secret', () => {
-        const bindings = buildWorkerBindings({
-            environmentConfig: {},
-            secrets: { EMPTY_SECRET: '' },
-        });
+        const bindings = build({ environmentConfig: {}, secrets: { EMPTY_SECRET: '' } });
 
-        assertEqual(1, bindings.length);
-        assertEqual('secret_text', bindings[0].type);
-        assertEqual('', bindings[0].text);
+        const byName = groupByName(bindings);
+
+        assertEqual('secret_text', byName.EMPTY_SECRET.type);
+        assertEqual('', byName.EMPTY_SECRET.text);
     });
 
     it('produces bindings every one of which CloudflareWorkerVersion#addBinding() accepts', () => {
-        const bindings = buildWorkerBindings({
-            environmentConfig: makeEnvironmentConfig(),
-            secrets: { API_SECRET: 'shh' },
-        });
+        const bindings = build({ secrets: { API_SECRET: 'shh' } });
 
         const version = new CloudflareWorkerVersion();
 
@@ -180,11 +201,30 @@ function makeEnvironmentConfig() {
         OBJECT_STORE: {
             buckets: { assets: { bindingName: 'ASSET_BUCKET', bucketName: 'assets' } },
         },
-        ENVARS: {
-            APP_NAME: 'kixx-test-app',
-            LOG_LEVEL: 'info',
-        },
     };
+}
+
+// Every case here is a variation on one full environment, so the defaults are
+// the sample and a test names only what it is actually varying.
+function build(args) {
+    const {
+        environmentConfig = makeEnvironmentConfig(),
+        environment = 'production',
+        envars = { TRUST_PROXY: 'false' },
+        secrets = {},
+    } = args;
+
+    return buildWorkerBindings({ environmentConfig, environment, envars, secrets });
+}
+
+function groupByName(bindings) {
+    const byName = {};
+
+    for (const binding of bindings) {
+        byName[binding.name] = binding;
+    }
+
+    return byName;
 }
 
 function groupByType(bindings) {

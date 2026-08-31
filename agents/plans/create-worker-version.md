@@ -33,7 +33,8 @@ resolve resources               configured id -> verify it exists
    +-- anything created? -----> print ids to paste, STOP. No version created.
    |
    v
-read .env.<environment>         -> secret_text values
+read .env.<environment>         -> plain_text values
+read .env.<environment>.secrets -> secret_text values
 read state file                 -> previous hashes, migrationTag, DO classes
    |
    v
@@ -101,23 +102,34 @@ Recorded so no later agent re-opens them.
 | `kv_namespace` | `KEY_VALUE_STORE`, and `CONTENT_STORE.kvNamespaceName`/`kvNamespaceId` |
 | `durable_object_namespace` | `CONTENT_STORE.durableObjectBindingName`/`durableObjectClassName` |
 | `r2_bucket` | `OBJECT_STORE.buckets` |
-| `plain_text` | `ENVARS`, plus the injected `BUILD_ID` |
-| `secret_text` | every key in `./.env.<environment>` |
+| `plain_text` | every key in `./.env.<environment>`, plus the injected `ENVIRONMENT` and `BUILD_ID` |
+| `secret_text` | every key in `./.env.<environment>.secrets` |
 
 - Every one of those config blocks is **optional**. A block that is present must
   be well-formed; a block that is absent contributes no bindings. This keeps the
   command usable by an application that does not use D1, or R2, or a content
   store. The cost is that a mistyped block name silently contributes nothing.
-- A name appearing in both `ENVARS` and `.env.<environment>` is a `UsageError`
-  naming the key. It is never resolved by precedence: a secret quietly demoted to
-  plain text is the worst possible silent outcome.
+- A value's binding type follows the file it was written in and nothing else.
+  The secrecy split follows the git boundary — `.env.<environment>` is committed
+  and `.env.<environment>.secrets` is not — so there is no per-key annotation to
+  keep in sync and no way to classify a value two ways at once.
+- A name appearing in both dotenv files is a `UsageError` naming both files. It
+  is never resolved by precedence: a secret quietly demoted to plain text is the
+  worst possible silent outcome.
+- Both files are required. The application treats each as independently optional
+  at startup, but a deployment reaching Cloudflare without one is far more likely
+  to be a mistyped environment name than an environment with genuinely no
+  secrets, and the resulting Worker fails long after the command reports success.
 - Duplicate binding names across any two sources are pre-checked with a message
   naming both sources, rather than relying on `CloudflareWorkerVersion`'s generic
   duplicate assertion.
-- `ENVARS` values must be strings. A number or boolean is a `UsageError`, because
-  a silent `String()` coercion would put `'false'` into the Worker, which is
-  truthy.
-- `BUILD_ID` declared in `ENVARS` is a `UsageError`; the command owns that name.
+- `ENVIRONMENT` is bound from `--environment`, and the value the plain file
+  carries for the Node.js server is dropped. The Worker selects its config
+  section with it, so a `.env.staging` copied from `.env.production` would
+  otherwise deploy a Worker running production's config. Unlike `BUILD_ID` it is
+  constant for an environment, so it is a bindings hash input.
+- `BUILD_ID` declared in either dotenv file is a `UsageError`; the command owns
+  that name.
 - No `version_metadata` binding is emitted.
 - R2 buckets are bound verbatim and are never verified or created. The API client
   has no R2 methods and buckets are provisioned separately.
@@ -221,12 +233,6 @@ handoff notes.
 `cloudflare-config.js` gains, per environment:
 
 ```js
-ENVARS: {
-    APP_NAME: 'kixx-test-app',
-    ENVIRONMENT: 'production',
-    LOG_LEVEL: 'info',
-},
-
 // Optional. Only needed to rename, delete, or transfer a Durable Object class.
 DURABLE_OBJECT_MIGRATIONS: [
     { action: 'rename', from: 'OldName', to: 'NewName' },
@@ -235,8 +241,11 @@ DURABLE_OBJECT_MIGRATIONS: [
 ],
 ```
 
-`WORKER_VERSION` already exists in `tmp/app/cloudflare-config.js`. `ENVARS` does
-not, and must be added there before the Task 12 manual check can run.
+`WORKER_VERSION` already exists in `tmp/app/cloudflare-config.js`.
+
+Plain environment variables are **not** configuration and have no block here.
+They live in the committed `.env.<environment>`, beside the ignored
+`.env.<environment>.secrets`; see the Bindings section above.
 
 ### Module layout
 
@@ -564,31 +573,41 @@ Record the actual files changed in the handoff notes.
 
 ### Task 4: Environment file reader
 
-**Status:** Complete
+**Status:** Complete (revised — see handoff)
 **Depends on:** Task 1
 **Documentation:** `agents/docs/code-style-guide.md`, `test/README.md`
 
 **Objective**
 
-`./.env.<environment>` is parsed into a plain object of name to string value,
-with rules chosen so a secret is never silently corrupted by parsing.
+An environment's pair of dotenv files is parsed into two plain objects of name
+to string value, with rules chosen so a value is never silently corrupted by
+parsing.
 
 **Scope**
 
-- In: `lib/env-file.js` — locating the file for an environment, reading it
-  through the injected adapter, and parsing it.
-- Out: turning the result into bindings (Task 7); any notion of Cloudflare.
+- In: `lib/env-file.js` — locating both files for an environment, reading them
+  through the injected adapter, and parsing them.
+- Out: turning the result into bindings (Task 7); deciding which of the two is
+  secret (Task 8 derives that from which object a value arrived in); any notion
+  of Cloudflare.
 
 **Design and invariants**
 
-- `readEnvFile(args)` takes `{ projectDirectory, environment, fileSystem }` and
-  resolves to a plain object. One options object, destructured in the body, per
-  the style guide.
-- The filepath is `<projectDirectory>/.env.<environment>`.
-- A missing file is a `UsageError` naming the expected path. It is not treated as
-  "no secrets": an application deploying with zero secrets is far less likely
-  than a mistyped environment name, and silently deploying without secrets is a
-  production outage.
+- `readEnvFiles(args)` takes `{ projectDirectory, environment, fileSystem }` and
+  resolves to `{ envars, secrets }`. One options object, destructured in the
+  body, per the style guide.
+- The filepaths are `<projectDirectory>/.env.<environment>` and that path with a
+  `.secrets` suffix. The pair is read together because the pair is the unit that
+  carries the meaning: secrecy is expressed by which file a value is written in,
+  so a caller holding only one of them cannot tell a plain value from a secret.
+- A missing file is a `UsageError` naming the expected path, for either file.
+  Neither is treated as "nothing to bind": the application treats each as
+  independently optional at startup, but an environment that genuinely has no
+  secrets is far less likely than a mistyped environment name, and silently
+  deploying without them is a production outage.
+- A name appearing in both files is returned in both objects. It is a
+  misconfiguration, but not this module's to detect: Task 8 recognizes it as one
+  collision among several kinds.
 - Parsing rules, deliberately minimal:
   - Blank lines are skipped.
   - A line whose first non-whitespace character is `#` is a comment.
@@ -622,8 +641,8 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] Returns a plain object of name to string for a well-formed file.
-- [ ] A missing file throws a `UsageError` naming the expected path.
+- [ ] Returns both files as separate plain objects of name to string.
+- [ ] Either file missing throws a `UsageError` naming that file's path.
 - [ ] Blank lines and full-line comments are skipped.
 - [ ] A `#` inside a value is preserved.
 - [ ] One layer of matching single or double quotes is stripped; an inner quote
@@ -634,6 +653,7 @@ Record the actual files changed in the handoff notes.
 - [ ] A duplicate name throws a `UsageError` naming both line numbers.
 - [ ] A key named `__proto__` does not pollute the returned object's prototype.
 - [ ] `\r\n` line endings parse identically to `\n`.
+- [ ] A name written in both files is returned in both objects.
 
 **Validation**
 
@@ -642,8 +662,8 @@ Record the actual files changed in the handoff notes.
 - Tests inject a mock `FileSystem` built from a file-local `makeFileSystem(files)`
   helper over a map of absolute path to contents, per the `test/README.md`
   preference for file-local helpers. No test touches a real file.
-- A test parsing a copy of the sample `example.env` content, proving the real
-  shape works including its comment blocks.
+- A test parsing a copy of the sample `example.env` and `example.env.secrets`
+  content, proving the real shape works including its comment blocks.
 
 **Progress and handoff**
 
@@ -662,6 +682,13 @@ Record the actual files changed in the handoff notes.
 - Validation run: `node run-tests.js test/unit-tests/lib/env-file.test.js`
   passed (12 tests); `node run-linter.js lib/env-file.js
   test/unit-tests/lib/env-file.test.js` passed with no output.
+- Revision (application config reshape): the application split its dotenv file
+  into a committed `.env.<environment>` and an ignored
+  `.env.<environment>.secrets`, so `readEnvFile()` became `readEnvFiles()`
+  returning `{ envars, secrets }`. Both files are required, and the parser is
+  unchanged. The design and acceptance criteria above are rewritten to the new
+  shape rather than kept as history, so they can still be used to verify the
+  module. Re-validated with the full suite and `npm run lint`.
 - Blockers: None.
 
 ---
@@ -904,14 +931,14 @@ config key or the `.env` key at fault.
 
 - In: `lib/cloudflare/worker-bindings.js` — reading the six sources, validating
   each, detecting collisions, and ordering the result.
-- Out: reading the `.env` file (Task 4); injecting `BUILD_ID` (Task 10);
+- Out: reading the dotenv files (Task 4); injecting `BUILD_ID` (Task 10);
   hashing (Task 10); resolving resource ids (Task 9).
 
 **Design and invariants**
 
-- `buildWorkerBindings(args)` takes `{ environmentConfig, secrets }` and returns
-  an array of binding objects in the shape `CloudflareWorkerVersion#addBinding()`
-  accepts.
+- `buildWorkerBindings(args)` takes `{ environmentConfig, environment, envars,
+  secrets }` and returns an array of binding objects in the shape
+  `CloudflareWorkerVersion#addBinding()` accepts.
 - **The returned array never contains `BUILD_ID`.** The array is the bindings
   hash input, and `BUILD_ID` is generated only after the change decision. The
   orchestrator appends it. This is stated in the module documentation, because a
@@ -924,8 +951,9 @@ config key or the `.env` key at fault.
 | `KEY_VALUE_STORE` | one `kv_namespace` from `bindingName` and `namespaceId` |
 | `CONTENT_STORE` | one `kv_namespace` from `kvBindingName` and `kvNamespaceId`, and one `durable_object_namespace` from `durableObjectBindingName` and `durableObjectClassName` |
 | `OBJECT_STORE.buckets` | one `r2_bucket` per entry, from `bindingName` and `bucketName` |
-| `ENVARS` | one `plain_text` per entry |
-| `secrets` | one `secret_text` per entry |
+| `envars` | one `plain_text` per entry, from `.env.<environment>` |
+| `secrets` | one `secret_text` per entry, from `.env.<environment>.secrets` |
+| `environment` | the injected `ENVIRONMENT` `plain_text` |
 
 - A block that is absent contributes nothing. A block that is present must be
   well-formed: a missing or empty required field is a `UsageError` naming the
@@ -934,11 +962,23 @@ config key or the `.env` key at fault.
 - A null `databaseId`, `namespaceId`, or `kvNamespaceId` reaching this function is
   an error. Task 9 resolves ids and stops the run before this point when any is
   missing, so a null here means the pipeline was composed wrongly.
-- `ENVARS` values must be strings. A number, boolean, `null`, or object is a
-  `UsageError` naming the key and its actual type. No coercion.
-- `ENVARS` may not declare `BUILD_ID`; that is a `UsageError`.
-- A name present in both `ENVARS` and `secrets` is a `UsageError` naming the key
-  and both files. It is never resolved by precedence.
+- A value's binding type follows the file it was written in and nothing else.
+  The two dotenv objects arrive already separated by Task 4, so this module needs
+  no per-key annotation and cannot classify a value two ways at once. Values are
+  strings by construction — the parser produces nothing else — so there is no
+  type check and no coercion.
+- `ENVIRONMENT` is bound from the `environment` argument, and any `ENVIRONMENT`
+  in `envars` is dropped rather than rejected: the plain file must carry it for
+  the Node.js server, but the Worker selects its config section with it, so a
+  `.env.staging` copied from `.env.production` must not be able to choose the
+  environment. Unlike `BUILD_ID` it is constant for an environment, so it belongs
+  in the array and therefore in the bindings hash.
+- Neither dotenv file may declare `BUILD_ID`; that is a `UsageError` naming the
+  file.
+- A name present in both dotenv objects is a `UsageError` naming both files. It
+  is never resolved by precedence: a secret quietly demoted to plain text is the
+  worst possible silent outcome, and this check is what makes "the filename
+  determines the binding type" true rather than a convention.
 - Any duplicate binding name across any two sources is a `UsageError` naming the
   name and both contributing sources. This runs before
   `CloudflareWorkerVersion#addBinding()`, whose own duplicate assertion is
@@ -961,19 +1001,21 @@ Record the actual files changed in the handoff notes.
 
 - [ ] A full sample environment produces exactly the expected binding set: one
       `d1`, two `kv_namespace`, one `durable_object_namespace`, the configured
-      `r2_bucket` entries, one `plain_text` per `ENVARS` entry, and one
-      `secret_text` per `.env` key.
-- [ ] `BUILD_ID` is absent from the result even when `secrets` or `ENVARS`
+      `r2_bucket` entries, one `plain_text` per `envars` key plus `ENVIRONMENT`,
+      and one `secret_text` per `secrets` key.
+- [ ] `BUILD_ID` is absent from the result even when `envars` or `secrets`
       contain unrelated keys.
 - [ ] An empty `OBJECT_STORE.buckets` produces no `r2_bucket` bindings.
 - [ ] Every config block is independently omittable, and omitting all of them
-      with empty secrets yields an empty array.
+      with two empty dotenv objects yields only the `ENVIRONMENT` binding.
 - [ ] A missing required field in a present block throws a `UsageError` naming
       the full dotted config path.
 - [ ] A null resource id throws.
-- [ ] A non-string `ENVARS` value throws naming the key and its type.
-- [ ] `ENVARS.BUILD_ID` throws.
-- [ ] A name in both `ENVARS` and `secrets` throws naming both sources.
+- [ ] `ENVIRONMENT` is bound from the `environment` argument, and an
+      `ENVIRONMENT` in `envars` neither overrides it nor collides with it.
+- [ ] `BUILD_ID` in either dotenv object throws naming that file.
+- [ ] A name in both dotenv objects throws naming both files.
+- [ ] A dotenv name colliding with a config block's binding name throws.
 - [ ] A duplicate name across two config blocks throws naming both sources.
 - [ ] The result is sorted by name, and reordering the input object keys does not
       change the output.
@@ -992,20 +1034,20 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Added `buildWorkerBindings({ environmentConfig, secrets })`
-  covering all six sources, collision checks (ENVARS/secrets and any two
-  config blocks), the `BUILD_ID` guard, and name-sorted output.
+- Completed: Added `buildWorkerBindings(...)` covering all sources, collision
+  checks (the two dotenv files and any two config blocks), the `BUILD_ID` guard,
+  and name-sorted output.
 - Current state: Complete.
 - Remaining: Nothing.
 - Decisions and discoveries: The plan's acceptance-criteria example error path
   (`environments.production.DOCUMENT_STORE.bindingName`) includes the
-  environment name, but this function's documented signature is
-  `{ environmentConfig, secrets }` with no environment name available — Task
-  10's orchestrator is the only place that knows it. Error messages here name
-  paths relative to the environment block instead (`DOCUMENT_STORE.bindingName`),
-  and the module doc comment records why, so a later agent does not try to
-  thread an environment name through a function whose signature the plan
-  fixed. A null resource id throws a plain `Error`, not `UsageError`: per the
+  environment name, but the function's original signature
+  (`{ environmentConfig, secrets }`) had no environment name available — Task
+  10's orchestrator was the only place that knew it. Error messages here name
+  paths relative to the environment block instead (`DOCUMENT_STORE.bindingName`).
+  The environment name is now an argument (see the revision below), but the
+  relative paths are kept: the orchestrator prefixes the environment where it
+  renders them. A null resource id throws a plain `Error`, not `UsageError`: per the
   plan, that state means the pipeline was composed wrongly (Task 9 should
   have stopped the run first), which is a programming error rather than a
   user-facing config problem. **Correction (found while writing Task 10):**
@@ -1025,6 +1067,15 @@ Record the actual files changed in the handoff notes.
   passed (13 tests); `node run-tests.js` (full suite) passed (164 tests);
   `node run-linter.js lib/cloudflare test/unit-tests/lib/cloudflare` passed
   with no output.
+- Revision (application config reshape): the `ENVARS` config block is gone.
+  Plain environment variables now arrive from the committed
+  `.env.<environment>`, secrets from the ignored `.env.<environment>.secrets`,
+  and the signature gained `environment` and `envars`. `ENVIRONMENT` is injected
+  from the environment name and the plain file's copy is dropped. The `ENVARS`
+  string-type check went with the block — the dotenv parser produces only
+  strings. The design and acceptance criteria above are rewritten to the new
+  shape rather than kept as history, so they can still be used to verify the
+  module. Re-validated with the full suite and `npm run lint`.
 - Blockers: None.
 
 ---
@@ -1718,19 +1769,17 @@ its handoff notes, particularly the two open questions below.
 
 **Scope**
 
-- In: adding `ENVARS` to `tmp/app/cloudflare-config.js`, creating
-  `tmp/app/.env.production`, running the command, and recording what happened.
+- In: creating `tmp/app/.env.production` and `tmp/app/.env.production.secrets`,
+  running the command, and recording what happened.
 - Out: any committed fixture. `tmp/` is gitignored and `tmp/app` is disposable.
 
 **Design and invariants**
 
 - Prerequisites to set up before running:
-  - Add an `ENVARS` block to `environments.production` with `APP_NAME`,
-    `ENVIRONMENT`, and `LOG_LEVEL`, matching what `cloudflare-server.js` reads.
-  - Create `tmp/app/.env.production` with the three secrets from `example.env`
-    and without `APP_NAME`, `ENVIRONMENT`, or `LOG_LEVEL` — those now live in
-    `ENVARS`, and leaving them in both must produce the collision `UsageError`,
-    which is itself worth confirming once.
+  - Copy `tmp/sample-app/example.env` to `tmp/app/.env.production` and
+    `example.env.secrets` to `tmp/app/.env.production.secrets`. No key may appear
+    in both; putting one in both must produce the collision `UsageError`, which
+    is itself worth confirming once.
   - Ensure `tmp/app/.kixx/` exists so the project directory resolves to
     `tmp/app` rather than the devkit repository.
   - Create the Worker with `kixx.js cloudflare create-worker -e production`.
@@ -1748,8 +1797,7 @@ its handoff notes, particularly the two open questions below.
 
 **Expected touch points**
 
-- `tmp/app/cloudflare-config.js` — `ENVARS` block.
-- `tmp/app/.env.production` — new file.
+- `tmp/app/.env.production` and `tmp/app/.env.production.secrets` — new files.
 - Whichever task a discovery reopens.
 
 Treat this list as orientation, not permission to ignore other necessary files.
@@ -1769,15 +1817,17 @@ Record the actual files changed in the handoff notes.
       version, and leaves the state file byte-identical.
 - [ ] Editing one source file and re-running uploads with `changes.modules` true
       and the other two false.
-- [ ] Editing a secret in `.env.production` and re-running uploads with
+- [ ] Editing a secret in `.env.production.secrets` and re-running uploads with
       `changes.bindings` true only.
 - [ ] Editing `compatibility_date` and re-running uploads with `changes.config`
       true only.
 - [ ] `--force` with no change uploads.
 - [ ] `--deploy` routes traffic and the deployed Worker responds, with
       `env.BUILD_ID` matching the recorded `buildId`.
-- [ ] Declaring the same key in both `ENVARS` and `.env.production` aborts with
-      the collision `UsageError`.
+- [ ] Declaring the same key in both `.env.production` and
+      `.env.production.secrets` aborts with the collision `UsageError`.
+- [ ] The deployed Worker's `env.ENVIRONMENT` is `production` even when
+      `.env.production` carries a different value.
 - [ ] Both open questions are answered in the handoff notes.
 
 **Validation**
@@ -1806,8 +1856,8 @@ node ../../kixx.js cloudflare create-worker-version -e production --deploy
   namespaces, and a D1 database) against a live Cloudflare account. That is
   not something to do without the project owner's credentials and explicit
   go-ahead.
-- Remaining: Everything described in this task — add `ENVARS` to
-  `tmp/app/cloudflare-config.js`, create `tmp/app/.env.production`, run the
+- Remaining: Everything described in this task — create
+  `tmp/app/.env.production` and `tmp/app/.env.production.secrets`, run the
   five-command validation sequence against a real account, and answer both
   open questions (missing-resource HTTP status; migration-tag rejection
   shape) from what Cloudflare actually returns.

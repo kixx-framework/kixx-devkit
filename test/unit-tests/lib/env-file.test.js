@@ -1,38 +1,61 @@
 import { describe } from 'kixx-test';
 import { assert, assertEqual } from 'kixx-assert';
-import { readEnvFile } from '../../../lib/env-file.js';
+import { readEnvFiles } from '../../../lib/env-file.js';
+
+const ENVARS_FILEPATH = '/app/.env.production';
+const SECRETS_FILEPATH = '/app/.env.production.secrets';
 
 
 describe('env-file', ({ it }) => {
-    it('returns a plain object of name to string for a well-formed file', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': [
-                'APP_NAME=widget-api',
-                'PORT=3000',
-            ].join('\n'),
+    it('returns both files as separate plain objects of name to string', async () => {
+        const { envars, secrets } = await readBoth({
+            [ENVARS_FILEPATH]: [ 'ENVIRONMENT=production', 'PORT=3000' ].join('\n'),
+            [SECRETS_FILEPATH]: 'CSRF_TOKEN_SIGNING_SECRET=shh',
         });
 
-        const values = await readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
+        assertEqual('production', envars.ENVIRONMENT);
+        assertEqual('3000', envars.PORT);
+        assertEqual('shh', secrets.CSRF_TOKEN_SIGNING_SECRET);
 
-        assertEqual('widget-api', values.APP_NAME);
-        assertEqual('3000', values.PORT);
+        // The two halves stay separate: a deployment derives the binding type
+        // from which object a value arrived in.
+        assertEqual(undefined, envars.CSRF_TOKEN_SIGNING_SECRET);
+        assertEqual(undefined, secrets.PORT);
     });
 
-    it('throws a UsageError naming the expected path when the file is missing', async () => {
-        const fileSystem = makeFileSystem({});
-
+    it('throws a UsageError naming the expected path when the plain file is missing', async () => {
         const caught = await catchAsyncError(() => {
-            return readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
+            return readExactly({ [SECRETS_FILEPATH]: 'TOKEN=shh' });
         });
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
-        assert(caught.message.includes('/app/.env.production'), 'expected the message to name the path');
+        assert(caught.message.includes(ENVARS_FILEPATH), 'expected the message to name the path');
+    });
+
+    it('throws a UsageError naming the expected path when the secrets file is missing', async () => {
+        const caught = await catchAsyncError(() => {
+            return readExactly({ [ENVARS_FILEPATH]: 'PORT=3000' });
+        });
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes(SECRETS_FILEPATH), 'expected the message to name the secrets path');
+    });
+
+    it('returns empty objects for two empty files', async () => {
+        const { envars, secrets } = await readBoth({
+            [ENVARS_FILEPATH]: '',
+            [SECRETS_FILEPATH]: '',
+        });
+
+        assertEqual(0, Object.keys(envars).length);
+        assertEqual(0, Object.keys(secrets).length);
     });
 
     it('skips blank lines and full-line comments', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': [
+        const { envars } = await readBoth({
+            [ENVARS_FILEPATH]: [
                 '',
                 '# a comment',
                 '   # an indented comment',
@@ -41,53 +64,37 @@ describe('env-file', ({ it }) => {
             ].join('\n'),
         });
 
-        const values = await readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
-
-        assertEqual(1, Object.keys(values).length);
-        assertEqual('value', values.NAME);
+        assertEqual(1, Object.keys(envars).length);
+        assertEqual('value', envars.NAME);
     });
 
     it('preserves a hash character inside a value', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': 'TOKEN=abc#def',
-        });
+        const { secrets } = await readBoth({ [SECRETS_FILEPATH]: 'TOKEN=abc#def' });
 
-        const values = await readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
-
-        assertEqual('abc#def', values.TOKEN);
+        assertEqual('abc#def', secrets.TOKEN);
     });
 
     it('strips one layer of matching quotes, leaving an inner quote of the other kind', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': [
+        const { envars } = await readBoth({
+            [ENVARS_FILEPATH]: [
                 'DOUBLE="say \'hi\'"',
                 'SINGLE=\'say "hi"\'',
             ].join('\n'),
         });
 
-        const values = await readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
-
-        assertEqual('say \'hi\'', values.DOUBLE);
-        assertEqual('say "hi"', values.SINGLE);
+        assertEqual('say \'hi\'', envars.DOUBLE);
+        assertEqual('say "hi"', envars.SINGLE);
     });
 
     it('yields an empty string for an empty value', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': 'EMPTY=',
-        });
+        const { envars } = await readBoth({ [ENVARS_FILEPATH]: 'EMPTY=' });
 
-        const values = await readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
-
-        assertEqual('', values.EMPTY);
+        assertEqual('', envars.EMPTY);
     });
 
     it('throws a UsageError naming the line number for a malformed line', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': [ 'NAME=value', 'not-a-valid-line' ].join('\n'),
-        });
-
         const caught = await catchAsyncError(() => {
-            return readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
+            return readBoth({ [ENVARS_FILEPATH]: [ 'NAME=value', 'not-a-valid-line' ].join('\n') });
         });
 
         assert(caught, 'expected an error to be thrown');
@@ -95,13 +102,19 @@ describe('env-file', ({ it }) => {
         assert(caught.message.includes('line 2'), 'expected the message to name the line number');
     });
 
-    it('throws a UsageError naming an invalid name', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': '1NAME=value',
+    it('throws a UsageError naming the secrets file for a malformed line in it', async () => {
+        const caught = await catchAsyncError(() => {
+            return readBoth({ [SECRETS_FILEPATH]: 'not-a-valid-line' });
         });
 
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes(SECRETS_FILEPATH), 'expected the message to name the secrets path');
+    });
+
+    it('throws a UsageError naming an invalid name', async () => {
         const caught = await catchAsyncError(() => {
-            return readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
+            return readBoth({ [ENVARS_FILEPATH]: '1NAME=value' });
         });
 
         assert(caught, 'expected an error to be thrown');
@@ -110,12 +123,8 @@ describe('env-file', ({ it }) => {
     });
 
     it('throws a UsageError naming both line numbers for a duplicate name', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': [ 'NAME=one', 'NAME=two' ].join('\n'),
-        });
-
         const caught = await catchAsyncError(() => {
-            return readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
+            return readBoth({ [ENVARS_FILEPATH]: [ 'NAME=one', 'NAME=two' ].join('\n') });
         });
 
         assert(caught, 'expected an error to be thrown');
@@ -123,34 +132,53 @@ describe('env-file', ({ it }) => {
         assert(caught.message.includes('lines 1 and 2'), 'expected the message to name both lines');
     });
 
-    it('does not let a __proto__ key pollute the returned object', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': '__proto__=value',
+    // A name in both files is a deployment misconfiguration, but it is not this
+    // module's to detect: it can only be recognized as one collision among
+    // several kinds, alongside the config-block binding names.
+    it('returns a name appearing in both files, leaving the collision to the caller', async () => {
+        const { envars, secrets } = await readBoth({
+            [ENVARS_FILEPATH]: 'TOKEN=plain',
+            [SECRETS_FILEPATH]: 'TOKEN=secret',
         });
 
-        const values = await readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
+        assertEqual('plain', envars.TOKEN);
+        assertEqual('secret', secrets.TOKEN);
+    });
 
-        assertEqual('value', values.__proto__);
+    it('does not let a __proto__ key pollute the returned objects', async () => {
+        const { envars } = await readBoth({ [ENVARS_FILEPATH]: '__proto__=value' });
+
+        assertEqual('value', envars.__proto__);
         assertEqual(Object.prototype, Object.getPrototypeOf({}));
-        assertEqual(null, Object.getPrototypeOf(values));
+        assertEqual(null, Object.getPrototypeOf(envars));
     });
 
     it('parses \\r\\n line endings identically to \\n', async () => {
-        const fileSystem = makeFileSystem({
-            '/app/.env.production': [ 'ONE=1', 'TWO=2' ].join('\r\n'),
-        });
+        const { envars } = await readBoth({ [ENVARS_FILEPATH]: [ 'ONE=1', 'TWO=2' ].join('\r\n') });
 
-        const values = await readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
-
-        assertEqual('1', values.ONE);
-        assertEqual('2', values.TWO);
+        assertEqual('1', envars.ONE);
+        assertEqual('2', envars.TWO);
     });
 
-    it('parses a copy of the sample example.env content', async () => {
-        const contents = [
-            'APP_NAME=kixx_ref',
+    it('parses a copy of the sample example.env and example.env.secrets content', async () => {
+        const envarsContents = [
+            '# Non-secret environment variables. This file is committed, and a deployment',
+            '# binds every value in it as plain text.',
+            '',
             'ENVIRONMENT=development',
-            'LOG_LEVEL=info',
+            '',
+            '# Trust the X-Forwarded-For header when resolving a request\'s client IP.',
+            'TRUST_PROXY=false',
+            '',
+            '# Identifies a single deploy. Usually set by CI rather than written here.',
+            '# BUILD_ID=',
+            '',
+            '# The Node.js server port. Defaults to 2026 and is overridable by --port.',
+            '# PORT=2026',
+        ].join('\n');
+
+        const secretsContents = [
+            '# Secrets only. This file is the template for .env.<environment>.secrets.',
             '',
             '# Rotating DOCUMENT_STORE_CURSOR_SIGNING_SECRET invalidates every cursor',
             '# currently in flight — anyone mid-pagination gets a 400 on their next page.',
@@ -164,18 +192,34 @@ describe('env-file', ({ it }) => {
             'ADMIN_BOOTSTRAP_TOKEN=dev_admin_bootstrap_token_change_me',
         ].join('\n');
 
-        const fileSystem = makeFileSystem({ '/app/.env.production': contents });
+        const { envars, secrets } = await readBoth({
+            [ENVARS_FILEPATH]: envarsContents,
+            [SECRETS_FILEPATH]: secretsContents,
+        });
 
-        const values = await readEnvFile({ projectDirectory: '/app', environment: 'production', fileSystem });
+        assertEqual('development', envars.ENVIRONMENT);
+        assertEqual('false', envars.TRUST_PROXY);
+        assertEqual(2, Object.keys(envars).length);
 
-        assertEqual('kixx_ref', values.APP_NAME);
-        assertEqual('development', values.ENVIRONMENT);
-        assertEqual('info', values.LOG_LEVEL);
-        assertEqual('secure-long-random-string', values.DOCUMENT_STORE_CURSOR_SIGNING_SECRET);
-        assertEqual('secure-long-random-string', values.CSRF_TOKEN_SIGNING_SECRET);
-        assertEqual('dev_admin_bootstrap_token_change_me', values.ADMIN_BOOTSTRAP_TOKEN);
+        assertEqual('secure-long-random-string', secrets.DOCUMENT_STORE_CURSOR_SIGNING_SECRET);
+        assertEqual('secure-long-random-string', secrets.CSRF_TOKEN_SIGNING_SECRET);
+        assertEqual('dev_admin_bootstrap_token_change_me', secrets.ADMIN_BOOTSTRAP_TOKEN);
     });
 });
+
+// Both files are required, so a test naming only one of them gets an empty
+// stand-in for the other rather than a missing-file error it did not intend.
+function readBoth(files) {
+    return readExactly({ [ENVARS_FILEPATH]: '', [SECRETS_FILEPATH]: '', ...files });
+}
+
+function readExactly(files) {
+    return readEnvFiles({
+        projectDirectory: '/app',
+        environment: 'production',
+        fileSystem: makeFileSystem(files),
+    });
+}
 
 function makeFileSystem(files) {
     return {

@@ -7,7 +7,8 @@ const FIXED_DATE = new Date('2026-08-29T16:49:32.000Z');
 const PROJECT_DIRECTORY = '/app';
 const ENVIRONMENT = 'production';
 const STATE_FILEPATH = '/app/.kixx/cloudflare-state.production.json';
-const ENV_FILEPATH = '/app/.env.production';
+const ENVARS_FILEPATH = '/app/.env.production';
+const SECRETS_FILEPATH = '/app/.env.production.secrets';
 
 describe('create-worker-version', ({ it }) => {
     it('throws a UsageError naming the dotted path for a missing environment block', async () => {
@@ -60,8 +61,46 @@ describe('create-worker-version', ({ it }) => {
         assert(!Object.prototype.hasOwnProperty.call(fileSystem.written, STATE_FILEPATH), 'expected no state file written');
     });
 
+    it('throws a UsageError naming the secrets file when it is missing', async () => {
+        const fileSystem = makeFileSystem({});
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+
+        const caught = await catchAsyncError(() => createWorkerVersion(runOptions({ apiClient, fileSystem })));
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes(SECRETS_FILEPATH), 'expected the message to name the secrets file');
+        assertEqual(0, apiClient.calls.createWorkerVersion.length);
+    });
+
+    it('uploads the two dotenv files as plain_text and secret_text, plus BUILD_ID and ENVIRONMENT', async () => {
+        const fileSystem = makeFileSystem({
+            [ENVARS_FILEPATH]: 'ENVIRONMENT=development\nTRUST_PROXY=false\n',
+            [SECRETS_FILEPATH]: 'API_SECRET=shh\n',
+        });
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+
+        const result = await createWorkerVersion(runOptions({ apiClient, fileSystem }));
+
+        const payload = apiClient.calls.createWorkerVersion[0].version;
+        const byName = {};
+
+        for (const binding of payload.bindings) {
+            byName[binding.name] = binding;
+        }
+
+        assertEqual('plain_text', byName.TRUST_PROXY.type);
+        assertEqual('secret_text', byName.API_SECRET.type);
+        assertEqual('plain_text', byName.BUILD_ID.type);
+        assertEqual(result.buildId, byName.BUILD_ID.text);
+
+        // --environment wins over the value the file carries for the Node.js server.
+        assertEqual('plain_text', byName.ENVIRONMENT.type);
+        assertEqual('production', byName.ENVIRONMENT.text);
+    });
+
     it('uploads on a first run with no state file, with changes all true', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         const result = await createWorkerVersion(runOptions({ apiClient, fileSystem }));
@@ -74,7 +113,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('skips a second run with unchanged inputs, making no createWorkerVersion call', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         await createWorkerVersion(runOptions({ apiClient, fileSystem }));
@@ -90,7 +129,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('uploads with only changes.modules true when the module source changes', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         await createWorkerVersion(runOptions({ apiClient, fileSystem }));
@@ -105,12 +144,12 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('uploads with only changes.bindings true when a secret value changes', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         await createWorkerVersion(runOptions({ apiClient, fileSystem }));
 
-        fileSystem.files[ENV_FILEPATH] = 'API_SECRET=different\n';
+        fileSystem.files[SECRETS_FILEPATH] = 'API_SECRET=different\n';
         const result = await createWorkerVersion(runOptions({ apiClient, fileSystem }));
 
         assertEqual('created', result.outcome);
@@ -120,7 +159,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('uploads with only changes.config true when compatibility_date changes', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
         const configOne = makeCloudflareConfig();
 
@@ -138,7 +177,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('uploads when nothing changed and --force is set', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         await createWorkerVersion(runOptions({ apiClient, fileSystem }));
@@ -151,7 +190,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('includes BUILD_ID as a plain_text binding and excludes it from the bindings hash', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         await createWorkerVersion(runOptions({ apiClient, fileSystem }));
@@ -166,7 +205,7 @@ describe('create-worker-version', ({ it }) => {
     it('produces the same three hashes across two independent runs whose only difference is the clock', async () => {
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
-        const fileSystemOne = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystemOne = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         await createWorkerVersion(runOptions({
             apiClient,
             fileSystem: fileSystemOne,
@@ -174,7 +213,7 @@ describe('create-worker-version', ({ it }) => {
         }));
         const stateOne = JSON.parse(fileSystemOne.written[STATE_FILEPATH]);
 
-        const fileSystemTwo = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystemTwo = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         await createWorkerVersion(runOptions({
             apiClient,
             fileSystem: fileSystemTwo,
@@ -189,7 +228,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('carries workers/tag and workers/triggered_by annotations with no workers/message', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         const result = await createWorkerVersion(runOptions({ apiClient, fileSystem }));
@@ -202,7 +241,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('uploads main_module as cloudflare-server.js with no ./ prefix on any module name', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         await createWorkerVersion(runOptions({ apiClient, fileSystem }));
@@ -214,7 +253,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('omits the exports key when the environment declares no Durable Object', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         await createWorkerVersion(runOptions({ apiClient, fileSystem }));
@@ -232,7 +271,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('deploys without the flag when introducing a class on a never-deployed Worker', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({
             getWorker: () => ({ id: 'worker-id', name: 'kixx-test-app', deployed_on: null }),
             createWorkerVersion: async () => ({ id: 'version-id' }),
@@ -256,7 +295,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('aborts naming --deploy when introducing a class on a deployed Worker', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({
             getWorker: () => deployedWorker([]),
             createWorkerVersion: async () => ({ id: 'version-id' }),
@@ -286,7 +325,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('deploys an explicitly requested deployment on a deployed Worker', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({
             getWorker: () => deployedWorker([]),
             createWorkerVersion: async () => ({ id: 'version-id' }),
@@ -305,7 +344,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('does not treat an already provisioned class as introduced', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({
             getWorker: () => deployedWorker([ 'ContentAddressableIndexStore' ]),
             createWorkerVersion: async () => ({ id: 'version-id' }),
@@ -324,7 +363,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('uploads again when the hashes match but the namespace is still missing', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
         const cloudflareConfig = withContentStore(makeCloudflareConfig());
 
@@ -343,7 +382,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('skips once the namespace exists and nothing else changed', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const cloudflareConfig = withContentStore(makeCloudflareConfig());
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
@@ -366,7 +405,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('uploads on a tombstone-only configuration edit', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         await createWorkerVersion(runOptions({ apiClient, fileSystem }));
@@ -386,7 +425,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('reports the reconciliation Cloudflare returned, and null when it returned none', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const reconciliation = { created: [ 'ContentAddressableIndexStore' ], removable_entries: [] };
         const apiClient = makeApiClient({
             createWorkerVersion: async () => ({ id: 'version-id', exports_reconciliation: reconciliation }),
@@ -403,14 +442,14 @@ describe('create-worker-version', ({ it }) => {
         const bare = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
         const withoutReport = await createWorkerVersion(runOptions({
             apiClient: bare,
-            fileSystem: makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' }),
+            fileSystem: makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' }),
         }));
 
         assertEqual(null, withoutReport.reconciliation);
     });
 
     it('forwards deploy: true to createWorkerVersion() and records it in the state', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         const result = await createWorkerVersion(runOptions({ apiClient, fileSystem, deploy: true }));
@@ -424,7 +463,7 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('writes no state file when createWorkerVersion() fails', async () => {
-        const fileSystem = makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' });
+        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({
             createWorkerVersion: async () => {
                 throw new CloudflareApiError('server error', { status: 500, method: 'POST', url: 'x' });
@@ -482,7 +521,7 @@ function runOptions(overrides) {
         cloudflareConfig: makeCloudflareConfig(),
         apiClient: makeApiClient({}),
         bundleModules: makeBundler('export default 1;'),
-        fileSystem: makeFileSystem({ [ENV_FILEPATH]: 'API_SECRET=shh\n' }),
+        fileSystem: makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' }),
         now: () => FIXED_DATE,
         ...overrides,
     };
@@ -507,9 +546,6 @@ function makeCloudflareConfig() {
                     namespaceName: 'kixx-test-kv-store',
                     namespaceId: 'namespace-id',
                 },
-                ENVARS: {
-                    APP_NAME: 'kixx-test-app',
-                },
             },
         },
     };
@@ -528,7 +564,10 @@ function makeBundler(source) {
     return bundler;
 }
 
-function makeFileSystem(files) {
+// The plain dotenv file is required and carries nothing a test varies, so it
+// is supplied by default; a test naming it overrides the default.
+function makeFileSystem(suppliedFiles) {
+    const files = { [ENVARS_FILEPATH]: 'TRUST_PROXY=false\n', ...suppliedFiles };
     const written = {};
 
     return {

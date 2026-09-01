@@ -52,6 +52,32 @@ read:
 - `app.environments.<environment>.publishingToken` in `.kixx/secrets.json` —
   the bearer token minted by `admin create-publishing-token`.
 
+```json
+// .kixx/config.json
+{
+    "app": {
+        "environments": {
+            "production": {
+                "origin": "https://example.com"
+            }
+        }
+    }
+}
+```
+
+```json
+// .kixx/secrets.json
+{
+    "app": {
+        "environments": {
+            "production": {
+                "publishingToken": "kxpat_..."
+            }
+        }
+    }
+}
+```
+
 Both accept `--origin` and `--token` overrides on the commands that use them.
 A missing setting fails with a usage error naming the file and the exact key
 path.

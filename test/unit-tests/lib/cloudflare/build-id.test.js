@@ -21,4 +21,10 @@ describe('build-id', ({ it }) => {
 
         assertEqual('2026-06-15T12-00-00Z', formatBuildId(date));
     });
+
+    it('appends an injected collision-resistant component', () => {
+        const date = new Date('2026-08-29T16:49:32.000Z');
+
+        assertEqual('2026-08-29T16-49-32Z-attempt-1', formatBuildId(date, 'attempt-1'));
+    });
 });

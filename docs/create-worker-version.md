@@ -1,8 +1,7 @@
 # Cloudflare create-worker-version
 
 `kixx.js cloudflare create-worker-version` packages a Kixx application as a
-Cloudflare Worker version, uploads it when its inputs changed, and optionally
-routes all traffic to the new version.
+Cloudflare Worker version and uploads it undeployed when its inputs changed.
 
 It does not create the Worker itself. Use `cloudflare create-worker` before this
 command when the configured Worker does not exist.
@@ -19,7 +18,6 @@ Options:
 | --- | --- |
 | `--environment`, `-e` | Required environment beneath `environments` in `cloudflare-config.js`. |
 | `--force` | Upload another version even when the recorded inputs are unchanged. |
-| `--deploy` | Send 100% of traffic to the version created by this run. |
 
 The command requires these values in the merged `.kixx/secrets.json`
 configuration:
@@ -136,7 +134,7 @@ The Worker record also tells the command:
 - whether the Worker has ever been deployed; and
 - which Durable Object class namespaces appear to be provisioned.
 
-Those facts control the Durable Object deployment policy described below.
+Those facts determine whether standalone creation is safe.
 
 ### 3. Resolve D1 and KV resources
 
@@ -227,10 +225,6 @@ hash requires an upload. `--force` also requires one, and so do these:
   receiving a version while the command reports success. The previous name is
   reported as `retargetedFrom` and printed as its own line in the command
   output.
-- `--deploy`. An explicit deployment request always creates and deploys a new
-  version, even when every hashed input is unchanged from the last run — the
-  flag expresses an external state change that local content hashes cannot
-  represent.
 
 `BUILD_ID` is absent from every hash. It is generated after the upload decision,
 so the clock alone does not make an unchanged build appear different.
@@ -243,7 +237,7 @@ the project when the same environment is built from multiple machines.
 
 For a required upload, the command:
 
-1. Generates a UTC timestamp-based `BUILD_ID`.
+1. Generates a UTC timestamp plus collision-resistant component as `BUILD_ID`.
 2. Adds `BUILD_ID` as a plain-text binding.
 3. Adds `workers/tag` with the build ID.
 4. Adds `workers/triggered_by` naming this command.
@@ -251,9 +245,7 @@ For a required upload, the command:
    version payload.
 6. Calls Cloudflare's Worker Versions API.
 
-Without deployment, the new version exists in Cloudflare but receives no
-traffic. With deployment, the create-version request asks Cloudflare to send
-100% of traffic to it.
+The new version exists in Cloudflare but receives no traffic.
 
 ### 8. Record state and report the result
 
@@ -263,7 +255,7 @@ the environment's state file. The record contains:
 ```json
 {
     "workerName": "example-worker",
-    "buildId": "2026-08-31T12-34-56Z",
+    "buildId": "2026-08-31T12-34-56Z-<unique-id>",
     "versionId": "cloudflare-version-id",
     "createdAt": "2026-08-31T12:34:56.000Z",
     "deployed": false,
@@ -277,12 +269,8 @@ A failed API request writes no new state. If the upload succeeds but the local
 write fails, a later run may create a duplicate version because it has no record
 of the successful upload.
 
-When the version is deployed, the command also records its `BUILD_ID` and the
-deployment timestamp in `.kixx/app-state.<environment>.json`. An undeployed,
-skipped, or resource-resolution-only run does not change application state.
-
 Command output identifies the environment and Worker, reports which hash groups
-changed, prints the build and version IDs, states whether deployment occurred,
+changed, prints the build and version IDs, states that it remains undeployed,
 shows Durable Object reconciliation when Cloudflare returns it, and names the
 state file written. When the upload was triggered by a Worker retarget, an
 unmissable `RETARGETED from Worker "..."` line precedes the hash lines so an
@@ -291,32 +279,15 @@ upload with three `unchanged` hashes does not read as a defect.
 ## Durable Object deployment policy
 
 Cloudflare provisions a new Durable Object namespace only when the version
-declaring it is deployed. The command detects a bound live class which is not in
-the Worker's provisioned namespace list before uploading.
-
-- If `--deploy` is present, the new version is deployed.
-- If the Worker has never served traffic, the command deploys automatically.
-  This provisions the namespace while displacing no existing deployment, and
-  the output calls out the automatic action.
-- If the Worker already serves traffic, the command stops and requires
-  `--deploy` as explicit confirmation that the new version may take 100% of
-  traffic.
-- If all bound classes are already provisioned, no automatic deployment is
-  necessary.
+declaring it is deployed. If a prepared version would require that forced
+deployment, this standalone command stops before upload and directs the
+operator to `cloudflare release`. That command stages and verifies content
+before making the same prepared upload.
 
 Tombstone reconciliation may report stale entries which are safe to remove from
 `DURABLE_OBJECT_MIGRATIONS`. A tombstone can remain in configuration without
 being applied twice, but Cloudflare may continue reporting it until it is
 removed.
-
-The first deployment of a Worker with no published content serves a build whose
-Publishing API has no registered closure, so requests fail until content is
-bootstrapped. After the command reports the new `BUILD_ID`, run:
-
-```sh
-kixx.js app publish --environment production \
-  --build-id <BUILD_ID> --bootstrap
-```
 
 ## Sample application
 

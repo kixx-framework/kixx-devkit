@@ -12,14 +12,21 @@ and configures commands, and what to write to add a new one.
 
 Available workflows:
 
-- `kixx.js app publish` — publish application content to a running environment.
+- `kixx.js app create-release` — create immutable application content.
+- `kixx.js app assign-build` — assign an existing Release to a build.
+- `kixx.js app publish` — create and assign application content.
+- `kixx.js app rollback` — inspect or restore a build's content history.
 - `kixx.js cloudflare create-worker` — create a Cloudflare Worker.
-- `kixx.js cloudflare create-worker-version` — package and upload Worker code.
-- `kixx.js cloudflare release` — create, publish, and deploy a release safely.
+- `kixx.js cloudflare create-worker-version` — upload an undeployed Worker version.
+- `kixx.js cloudflare deploy-version` — route traffic to an existing Worker version.
+- `kixx.js cloudflare release` — stage content and deploy a Worker release.
 
-See [docs/publish.md](docs/publish.md),
-[docs/create-worker-version.md](docs/create-worker-version.md), and
-[docs/release.md](docs/release.md) for usage and configuration.
+See [create-release](docs/create-release.md),
+[assign-build](docs/assign-build.md), [publish](docs/publish.md),
+[rollback](docs/rollback.md), [create-worker](docs/create-worker.md),
+[create-worker-version](docs/create-worker-version.md),
+[deploy-version](docs/deploy-version.md), and [release](docs/release.md) for
+usage and configuration.
 
 Development
 -----------

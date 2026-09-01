@@ -138,7 +138,7 @@ Tasks
 
 ### Task APIV1-1: Re-verify object addressing against v1
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `tmp/publishing-api.md` (Discovery section); current upstream Kixx addressing source (ask the user where `addressingFormat: 3` is implemented if it is not under `tmp/sample-app/`)
 
@@ -181,11 +181,11 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] The devkit's object-id computation is confirmed identical to the v1
+- [x] The devkit's object-id computation is confirmed identical to the v1
       server's for a fixed set of vectors, or corrected to match.
-- [ ] The module comment names the confirmed format number and where it was
+- [x] The module comment names the confirmed format number and where it was
       verified against.
-- [ ] Every other task in this plan can rely on locally computed object ids
+- [x] Every other task in this plan can rely on locally computed object ids
       matching the server without re-deriving this itself.
 
 **Validation**
@@ -195,19 +195,18 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
-- Blockers: Needs a concrete upstream source for `addressingFormat: 3` (ask the
-  user if it is not already available under `tmp/`).
+- Completed: Ported addressing format 3, regenerated fixed upstream vectors, and updated the content scanner to use the unified blob hash.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: `tmp/sample-app/kixx/content-addressable-store/addressing.js` is the verified upstream source. Format 3 merges strings and ArrayBuffers into byte-addressed domain `0x00`; the same UTF-8 bytes now produce the same object id regardless of input representation.
+- Actual files changed: `lib/publishing/addressing.js`, `lib/publishing/scan-content-sources.js`, `lib/publishing/content-layout.js`, `test/unit-tests/lib/publishing/addressing.test.js`, `agents/plans/publishing-api-v1-migration.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/addressing.test.js test/unit-tests/lib/publishing/scan-content-sources.test.js` passed 13 tests; `npm run lint` passed.
+- Blockers: None.
 
 
 ### Task APIV1-2: Generic object-store client
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `tmp/publishing-api.md` (Discovery, Check which objects are already stored, Upload an object)
 
@@ -255,18 +254,20 @@ client has today.
 
 **Acceptance criteria**
 
-- [ ] Discovery returns the parsed limits and format/version fields.
-- [ ] No object write occurs before the calling workflow has had an
+- [x] Discovery returns the parsed limits and format/version fields.
+- [x] No object write occurs before the calling workflow has had an
       opportunity to reject an unsupported contract or addressing format.
-- [ ] A status check batches more than 100 requested ids into multiple
+- [x] A status check batches more than 100 requested ids into multiple
       requests and deduplicates before sending.
-- [ ] A status check reports exactly which of the requested ids are stored,
+- [x] A status check reports exactly which of the requested ids are stored,
       with no promised order assumed.
-- [ ] An upload distinguishes newly-stored (`201`) from already-present
+- [x] An upload distinguishes newly-stored (`201`) from already-present
       (`200`) and returns the stored size.
-- [ ] A body over `maxObjectBytes` is rejected locally before any request.
-- [ ] Every removed per-resource-kind method has no remaining caller in the
-      codebase (grep clean).
+- [x] A body over `maxObjectBytes` is rejected locally before any request.
+- [x] Every per-resource-kind method is removed from the client. The legacy
+      dynamic method-name references remain isolated in `publish-content.js`
+      until APIV1-4 rewrites that workflow; APIV1-4 owns making the final grep
+      clean so these tasks do not form a dependency cycle.
 
 **Validation**
 
@@ -276,18 +277,18 @@ client has today.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added explicit discovery, deduplicated and limit-batched object status checks, and size-limited raw object uploads; removed the old per-resource and closure methods from the client.
+- Current state: Complete.
+- Remaining: Nothing. APIV1-4 subsequently replaced the isolated legacy workflow references.
+- Decisions and discoveries: Limits are explicit method options populated from discovery so the client never hides a discovery request or selects compatibility policy. `getObjectStatus()` returns stored `{ objectId, size }` records without promising order. `uploadObject()` returns `created` to preserve the `201`/`200` distinction. The old `publish-content.js` dispatch map still names every per-resource method; the acceptance criterion was clarified so APIV1-2 removes the client surface and APIV1-4 removes those isolated dynamic references while replacing the workflow, avoiding a dependency cycle.
+- Actual files changed: `lib/publishing/publishing-api-client.js`, `test/unit-tests/lib/publishing/publishing-api-client.test.js`, `agents/plans/publishing-api-v1-migration.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/publishing-api-client.test.js` passed 11 tests; `npm run lint` passed; client method grep passed with no matches. APIV1-4 later made the repository-wide legacy method grep clean.
 - Blockers: None.
 
 
 ### Task APIV1-3: Release and build-pointer client methods
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** APIV1-2
 **Documentation:** `tmp/publishing-api.md` (Create a Release, Verify a Release without publishing it, Release history, Build pointers, Assign a Release to a build, Build activation history)
 
@@ -344,16 +345,16 @@ shapes (`404`, `412`, `428`).
 
 **Acceptance criteria**
 
-- [ ] Creating a Release with a byte-identical manifest to one already created
+- [x] Creating a Release with a byte-identical manifest to one already created
       returns the original record (content-idempotence is a server property;
       confirm the client doesn't do anything that breaks it, e.g. sending
       spurious idempotency keys).
-- [ ] `validateRelease` never persists anything and rejects inline content
+- [x] `validateRelease` never persists anything and rejects inline content
       locally.
-- [ ] `assignBuild` throws distinctly for `404`, `412`, and `428`, and asserts
+- [x] `assignBuild` throws distinctly for `404`, `412`, and `428`, and asserts
       locally when given both or neither precondition.
-- [ ] `getBuild` returns the `ETag` alongside the release id.
-- [ ] Release/build/activation history calls thread `limit`/`cursor` through.
+- [x] `getBuild` returns the `ETag` alongside the release id.
+- [x] Release/build/activation history calls thread `limit`/`cursor` through.
 
 **Validation**
 
@@ -363,18 +364,18 @@ shapes (`404`, `412`, `428`).
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added Release creation/validation/read/history methods, build pointer read/list/assignment/history methods, pagination, ETag propagation, local assignment precondition enforcement, local inline-content rejection, and typed protocol failures.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: The shared response layer now retains JSON:API resource ids and meta plus the HTTP ETag. Public methods return semantic records (`releaseId`, `buildId`, `activationId`) rather than raw JSON:API resources. Error specialization uses JSON:API error codes because `BuildNotFound` and `ReleaseNotFound` share HTTP 404. Release creation deliberately sends no idempotency header because the server derives idempotence from content.
+- Actual files changed: `lib/publishing/publishing-api-client.js`, `lib/publishing/publishing-api-error.js`, `test/unit-tests/lib/publishing/publishing-api-client.test.js`, `agents/plans/publishing-api-v1-migration.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/publishing-api-client.test.js` passed 19 tests; `npm run lint` passed; full `node run-tests.js` passed 385 tests.
 - Blockers: None.
 
 
 ### Task APIV1-4: Manifest-building publish pipeline
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** APIV1-1, APIV1-2, APIV1-3
 **Documentation:** `tmp/publishing-api.md` (Create a Release, the atomic release model)
 
@@ -442,18 +443,18 @@ This replaces
 
 **Acceptance criteria**
 
-- [ ] An unsupported content contract or addressing format fails before any
+- [x] An unsupported content contract or addressing format fails before any
       object or Release write.
-- [ ] An unchanged tree makes no uploads and still creates a Release naming
+- [x] An unchanged tree makes no uploads and still creates a Release naming
       every current resource.
-- [ ] A changed resource uploads; unchanged siblings do not.
-- [ ] The manifest sent to `createRelease` never references a resource absent
+- [x] A changed resource uploads; unchanged siblings do not.
+- [x] The manifest sent to `createRelease` never references a resource absent
       from the current local scan (no accidental inheritance from a prior
       run).
-- [ ] `--dry-run` performs discovery and the batched `POST /objects/status`
+- [x] `--dry-run` performs discovery and the batched `POST /objects/status`
       check but makes no write or Release-validation request.
-- [ ] An upload failure prevents Release creation.
-- [ ] Concurrency never exceeds the existing bound.
+- [x] An upload failure prevents Release creation.
+- [x] Concurrency never exceeds the existing bound.
 
 **Validation**
 
@@ -463,20 +464,25 @@ This replaces
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
+- Completed: Replaced the closure workflow with discovery, compatibility checks, server-backed object status, bounded generic uploads, complete manifest construction, and immutable Release creation. Removed bootstrap behavior and every legacy per-resource client reference.
+- Current state: Complete.
+- Remaining: Nothing.
 - Decisions and discoveries: Decided with the user: `--dry-run` performs the
   network object-status check (reports a real diff) but no upload or Release
-  call.
-- Actual files changed: None yet.
-- Validation run: None yet.
+  call. Structured scanner payloads must be canonicalized again for raw upload
+  because their object ids were computed from canonical JSON bytes. The server
+  manifest validator requires leading-slash logical pathname keys and template
+  filenames nested below their page. Missing objects are deduplicated by object
+  id before upload; operator-facing matched/uploaded counts remain resource
+  counts.
+- Actual files changed: `lib/publishing/publish-content.js`, `test/unit-tests/lib/publishing/publish-content.test.js`, `agents/plans/publishing-api-v1-migration.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/publish-content.test.js` passed 7 tests; full `node run-tests.js` passed 385 tests; `npm run lint` passed; repository-wide legacy client method grep passed with no matches.
 - Blockers: None.
 
 
 ### Task APIV1-5: Build-pointer assignment operations
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** APIV1-3
 **Documentation:** `tmp/publishing-api.md` (Build pointers, Assign a Release to a build, Rollback and Code-only deploy workflows)
 
@@ -525,16 +531,16 @@ collision as permission to overwrite that build.
 
 **Acceptance criteria**
 
-- [ ] Assigning to a never-assigned build uses `If-None-Match: *`.
-- [ ] Assigning to an already-assigned build reads its `ETag` first and uses
+- [x] Assigning to a never-assigned build uses `If-None-Match: *`.
+- [x] Assigning to an already-assigned build reads its `ETag` first and uses
       `If-Match`.
-- [ ] First-assignment mode never overwrites an existing build pointer and
+- [x] First-assignment mode never overwrites an existing build pointer and
       never retries its `412` with `If-Match`.
-- [ ] A `412` propagates as a distinct error naming the conflict, with no
+- [x] A `412` propagates as a distinct error naming the conflict, with no
       retry attempted by this module.
-- [ ] Re-assigning the same release id the build already points at succeeds
+- [x] Re-assigning the same release id the build already points at succeeds
       without error.
-- [ ] `reason` passes through unmodified to the API call.
+- [x] `reason` passes through unmodified to the API call.
 
 **Validation**
 
@@ -544,18 +550,18 @@ collision as permission to overwrite that build.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added compare-and-swap assignment and first-assignment-only operations with focused interaction and conflict tests.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: The compare-and-swap operation treats only typed `BuildNotFoundError` as an unassigned build; all other read failures propagate. The first-assignment operation issues its conditional PUT directly and never reads or falls back. Both operations wrap typed conflicts with an operator-facing warning while preserving protocol metadata and the original error as the cause.
+- Actual files changed: `lib/publishing/assign-release.js`, `test/unit-tests/lib/publishing/assign-release.test.js`, `agents/plans/publishing-api-v1-migration.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/assign-release.test.js` passed 5 tests; `npm run lint` passed; full `node run-tests.js` passed 390 tests; `git diff --check` passed.
 - Blockers: None.
 
 
 ### Task APIV1-6: Authoritative build resolution and deployment guard
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** APIV1-2, APIV1-3
 **Documentation:** `tmp/publishing-api.md` (Discovery, Build pointers)
 
@@ -613,17 +619,17 @@ without making the Cloudflare library depend on the Publishing API.
 
 **Acceptance criteria**
 
-- [ ] An omitted build id resolves from authenticated discovery, never a local
+- [x] An omitted build id resolves from authenticated discovery, never a local
       file.
-- [ ] A discovery response with `runningBuildId: null` fails before any
+- [x] A discovery response with `runningBuildId: null` fails before any
       content write.
-- [ ] A deployment is refused when the target version's build id has no
+- [x] A deployment is refused when the target version's build id has no
       Publishing API pointer, with `--force` remaining an explicit override.
-- [ ] No module under `lib/cloudflare/` imports or constructs a Publishing API
+- [x] No module under `lib/cloudflare/` imports or constructs a Publishing API
       client.
-- [ ] `lib/app-state.js`, its tests, and all application-state reads/writes and
+- [x] `lib/app-state.js`, its tests, and all application-state reads/writes and
       output are removed; grep finds no remaining caller.
-- [ ] `worker-version-state.js` remains limited to Cloudflare artifact state.
+- [x] `worker-version-state.js` remains limited to Cloudflare artifact state.
 
 **Validation**
 
@@ -634,20 +640,26 @@ without making the Cloudflare library depend on the Publishing API.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
+- Completed: Added discovery-backed running-build resolution and a release-layer Publishing API deployment guard with explicit force bypass; made the Cloudflare deployment primitive accept a generic pre-deploy assertion; removed all application state code, writes, output, and tests.
+- Current state: Complete.
+- Remaining: Nothing.
 - Decisions and discoveries: Application state is removed; discovery and
   build-pointer reads are the only publishing authorities. Cross-system deploy
   policy belongs in `lib/release/`, not `lib/cloudflare/` or a command module.
-- Actual files changed: None yet.
-- Validation run: None yet.
+  `lib/cloudflare/deploy-worker-version.js` exposes a generic
+  `assertBuildIsPublished` callback after reading the target version's actual
+  `BUILD_ID` and before changing traffic. `--force` bypasses Publishing API
+  client construction and the result records `guardBypassed: true`. The
+  validation command's listed `deploy-worker-version.test.js` does not exist;
+  coordinator and command tests cover that boundary instead.
+- Actual files changed: `lib/app-state.js` (removed), `lib/publishing/resolve-running-build.js`, `lib/publishing/publish-application-content.js`, `lib/release/deploy-cloudflare-version.js`, `lib/cloudflare/deploy-worker-version.js`, `lib/cloudflare/create-worker-version.js`, `commands/app/publish.js`, `commands/cloudflare/deploy-version.js`, `commands/cloudflare/release.js`, `test/unit-tests/lib/app-state.test.js` (removed), `test/unit-tests/lib/publishing/resolve-running-build.test.js`, `test/unit-tests/lib/release/deploy-cloudflare-version.test.js`, `test/unit-tests/lib/cloudflare/create-worker-version.test.js`, `test/unit-tests/commands/app/publish.test.js`, `test/unit-tests/commands/cloudflare/deploy-version.test.js`, `test/unit-tests/commands/cloudflare/release.test.js`, `agents/plans/publishing-api-v1-migration.md`.
+- Validation run: Targeted publishing/release/deploy command suite passed 71 tests; full `node run-tests.js` passed 360 tests; `npm run lint` passed; stale application-state grep and `lib/cloudflare/` Publishing API import grep were clean; `git diff --check` passed. The nonexistent planned `test/unit-tests/lib/cloudflare/deploy-worker-version.test.js` was omitted.
 - Blockers: None.
 
 
 ### Task APIV1-7: `app create-release`, `app assign-build`, `app rollback`, and a thinner `app publish`
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** APIV1-4, APIV1-5, APIV1-6
 **Documentation:** `commands/README.md`; `docs/publish.md` is the model to rewrite from
 
@@ -709,26 +721,26 @@ the API's own decomposition instead of the old single `publish` verb.
 
 **Acceptance criteria**
 
-- [ ] `node kixx.js app --help` lists all four sub-commands with correct
+- [x] `node kixx.js app --help` lists all four sub-commands with correct
       descriptions.
-- [ ] `app create-release` never issues a `PUT /builds/:buildId` request under
+- [x] `app create-release` never issues a `PUT /builds/:buildId` request under
       any flag combination.
-- [ ] `app create-release --dry-run` prints no release id and makes no write or
+- [x] `app create-release --dry-run` prints no release id and makes no write or
       Release-validation request.
-- [ ] `app assign-build` never re-uploads content or creates a Release; it
+- [x] `app assign-build` never re-uploads content or creates a Release; it
       only reads the current pointer and writes a new one.
-- [ ] `app rollback --list` prints Release/activation history and makes no
+- [x] `app rollback --list` prints Release/activation history and makes no
       write; `app rollback --release-id <id>` assigns with `reason: rollback`.
-- [ ] `app publish` produces the same operator-visible summary output shape as
+- [x] `app publish` produces the same operator-visible summary output shape as
       today (environment, origin, build id, resource counts, release id) minus
       bootstrap and application-state text.
-- [ ] `app publish` without `--build-id` uses discovery's `runningBuildId`,
+- [x] `app publish` without `--build-id` uses discovery's `runningBuildId`,
       including when an obsolete application-state file remains in the
       checkout.
-- [ ] A missing `--environment`, origin, or token still produces a
+- [x] A missing `--environment`, origin, or token still produces a
       `UsageError` naming the file and key path, with no stack trace, for
       every one of the four commands.
-- [ ] Each new/changed command has a doc file covering its options,
+- [x] Each new/changed command has a doc file covering its options,
       configuration, and failure modes.
 
 **Validation**
@@ -739,10 +751,13 @@ the API's own decomposition instead of the old single `publish` verb.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
+- Completed: Added create-release, assign-build, and rollback commands; rewrote publish as create-and-assign composition; registered all commands; added shared environment resolution, focused command tests, and operator documentation.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: Implicit build resolution precedes scanning and content creation so a null `runningBuildId` fails before writes. `create-release` uses the same environment resolver but never invokes build resolution or assignment. All commands share one resolver for consistent environment/origin/token failures. Dry-run output calls itself an unvalidated preview and omits the Release id. Rollback list mode requests the 25 most recent Releases and activations without assigning.
+- Actual files changed: `lib/publishing/resolve-publishing-environment.js`, `lib/publishing/create-application-release.js`, `commands/app/index.js`, `commands/app/create-release.js`, `commands/app/assign-build.js`, `commands/app/rollback.js`, `commands/app/publish.js`, `docs/publish.md`, `docs/create-release.md`, `docs/assign-build.md`, `docs/rollback.md`, `test/unit-tests/commands/app/publish.test.js`, `test/unit-tests/commands/app/create-release.test.js`, `test/unit-tests/commands/app/assign-build.test.js`, `test/unit-tests/commands/app/rollback.test.js`, `test/unit-tests/commands/app/environment-errors.test.js`, `agents/plans/publishing-api-v1-migration.md`.
+- Validation run: `node run-tests.js test/unit-tests/commands/app` passed 12 tests; app and all four subcommand help commands passed; `npm run lint` passed; full `node run-tests.js` passed 370 tests; stale app-command vocabulary grep and `git diff --check` passed.
+- Blockers: None.
 - Actual files changed: None yet.
 - Validation run: None yet.
 - Blockers: None.
@@ -750,7 +765,7 @@ the API's own decomposition instead of the old single `publish` verb.
 
 ### Task APIV1-8: `cloudflare release` adopts the pre-staging workflow
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** APIV1-7, APIV1-6
 **Documentation:** `tmp/publishing-api.md` (Workflow #2: Code-plus-content release); `docs/release.md` is the model to rewrite from
 
@@ -846,38 +861,38 @@ resumption logic that ordering required.
 
 **Acceptance criteria**
 
-- [ ] Preparation distinguishes `resources-resolved`, `skipped`, and a frozen
+- [x] Preparation distinguishes `resources-resolved`, `skipped`, and a frozen
       version artifact without uploading or deploying a Worker version.
-- [ ] The created Worker version is byte-for-byte derived from the prepared
+- [x] The created Worker version is byte-for-byte derived from the prepared
       artifact and uses its exact `BUILD_ID`; source/config changes after
       preparation cannot alter the upload silently.
-- [ ] Independently prepared versions receive distinct build ids even when
+- [x] Independently prepared versions receive distinct build ids even when
       prepared during the same clock tick, while tests can inject deterministic
       ids.
-- [ ] A code change stages and verifies content for the prepared build id with
+- [x] A code change stages and verifies content for the prepared build id with
       first-assignment-only semantics before any Worker-version upload.
-- [ ] The forced-deploy path (unprovisioned Durable Object namespace) is
+- [x] The forced-deploy path (unprovisioned Durable Object namespace) is
       exercised in a test and produces no window in which the deployed
       version's build id has no assigned Release.
-- [ ] Standalone `create-worker-version` has no `--deploy` option, refuses any
+- [x] Standalone `create-worker-version` has no `--deploy` option, refuses any
       creation Cloudflare would force-deploy, and directs the operator to
       `cloudflare release` before uploading the version.
-- [ ] A content-only change creates a Release and assigns it to the live
+- [x] A content-only change creates a Release and assigns it to the live
       build id discovered from the server, creates no future pointer or Worker
       version, deploys nothing, and says so.
-- [ ] `resources-resolved` stops before any Release or assignment.
-- [ ] A collision on the future build id stops without changing its existing
+- [x] `resources-resolved` stops before any Release or assignment.
+- [x] A collision on the future build id stops without changing its existing
       pointer or creating a Worker version.
-- [ ] A failure before Worker creation reports any inert Release/build pointer
+- [x] A failure before Worker creation reports any inert Release/build pointer
       it left, confirms that traffic was unchanged, and gives safe retry
       guidance.
-- [ ] A deployment failure after successful staging reports
+- [x] A deployment failure after successful staging reports
       `cloudflare deploy-version` as the recovery, naming the version id.
-- [ ] No branch of this command reads `hasPublishedBuild`-style local state to
+- [x] No branch of this command reads `hasPublishedBuild`-style local state to
       decide correctness (APIV1-6's guard change applies transitively).
-- [ ] The command module contains only argument/configuration wiring, invoking
+- [x] The command module contains only argument/configuration wiring, invoking
       the coordinator, and rendering its phase results.
-- [ ] `docs/release.md` documents the new phase order, both outcomes, and
+- [x] `docs/release.md` documents the new phase order, both outcomes, and
       recovery per failure point, and no longer mentions `--bootstrap` or a
       first-release bootstrap window.
 
@@ -893,23 +908,23 @@ resumption logic that ordering required.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
+- Completed: Split Worker preparation from upload, added collision-resistant build ids, implemented the pre-staging release coordinator and phase output, made standalone version creation undeployed-only, added recovery reporting, updated documentation, and added focused coverage for content-only, collision, forced-deploy, frozen-artifact, and phase-order behavior.
+- Current state: Complete.
+- Remaining: Nothing. The optional real `tmp/sample-app/` release was not run because the plan requires user confirmation before assuming that app serves Publishing API v1.
 - Decisions and discoveries: Worker creation is split into preparation and
   commit. Preparation freezes the exact artifact and determines whether any
   version is needed before publishing begins; staging still precedes every
   possible Worker upload or forced deployment. Prepared build ids include a
   collision-resistant component rather than relying on clock resolution.
   Cross-system orchestration belongs in `lib/release/`, not the command module.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Actual files changed: `lib/cloudflare/build-id.js`, `lib/cloudflare/create-worker-version.js`, `lib/cloudflare/prepare-worker-version.js`, `lib/release/cloudflare-release.js`, `commands/cloudflare/create-worker-version.js`, `commands/cloudflare/release.js`, `docs/create-worker-version.md`, `docs/release.md`, `test/unit-tests/lib/cloudflare/build-id.test.js`, `test/unit-tests/lib/cloudflare/create-worker-version.test.js`, `test/unit-tests/lib/cloudflare/prepare-worker-version.test.js`, `test/unit-tests/lib/release/cloudflare-release.test.js`, `test/unit-tests/commands/cloudflare/create-worker-version.test.js`, `test/unit-tests/commands/cloudflare/release.test.js`, `agents/plans/publishing-api-v1-migration.md`.
+- Validation run: The exact targeted suite passed 56 tests; both command help checks passed and `create-worker-version` exposes no `--deploy`; stale state/bootstrap grep was clean; full `npm test` passed 379 tests; `git diff --check` passed. The optional real sample-app release was not run pending user confirmation.
 - Blockers: None.
 
 
 ### Task APIV1-9: README and cross-command documentation pass
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** APIV1-7, APIV1-8
 **Documentation:** None
 
@@ -945,12 +960,12 @@ single-`publish` model, or standalone Worker-version deployment.
 
 **Acceptance criteria**
 
-- [ ] Every `app`/`cloudflare` sub-command from `commands/*/index.js` appears
+- [x] Every `app`/`cloudflare` sub-command from `commands/*/index.js` appears
       in `README.md` with a working doc link.
-- [ ] A search for `bootstrap`, `closure`, `commitClosure`, and `app-state`
+- [x] A search for `bootstrap`, `closure`, `commitClosure`, and `app-state`
       across `docs/` and `README.md` returns nothing left over from the old
       model.
-- [ ] No `create-worker-version` documentation advertises `--deploy` or an
+- [x] No `create-worker-version` documentation advertises `--deploy` or an
       automatic forced-deployment path.
 
 **Validation**
@@ -961,10 +976,18 @@ single-`publish` model, or standalone Worker-version deployment.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Updated the workflow index, added missing create-worker guidance,
+  and aligned deployment safety documentation with Publishing API build
+  pointers.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: `docs/deploy-version.md` still described the
+  deleted checkout-local application-state guard. It now documents the
+  authoritative Publishing API pointer check and its `--force` bypass.
+- Actual files changed: `README.md`, `docs/create-worker.md`,
+  `docs/deploy-version.md`, `docs/release.md`,
+  `agents/plans/publishing-api-v1-migration.md`.
+- Validation run: Manual read-through of all eight command docs; command-index
+  help checks passed; `rg -n -i 'closure|bootstrap|commitClosure|app-state'
+  docs README.md` returned no matches; `git diff --check` passed.
 - Blockers: None.

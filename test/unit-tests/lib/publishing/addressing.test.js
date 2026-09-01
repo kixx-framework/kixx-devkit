@@ -4,33 +4,31 @@ import {
     FORMAT,
     canonicalize,
     getBlobSize,
-    hashArrayBufferBlob,
-    hashStringBlob,
+    hashBlob,
 } from '../../../../lib/publishing/addressing.js';
 
 
 /*
  * Regenerate these vectors from the project root with the upstream module:
  *
- * node --input-type=module -e "import { canonicalize, hashStringBlob,
- * hashArrayBufferBlob } from
+ * node --input-type=module -e "import { canonicalize, hashBlob } from
  * './tmp/sample-app/kixx/content-addressable-store/addressing.js'; ..."
  *
  * Pass the literal inputs below to the matching hash export. Canonicalize the
  * nested object and array before hashing them as string blobs.
  */
 const STRING_VECTORS = [
-    [ '', 'jp2relzuivkmko66f25yzuvx4m', 0 ],
-    [ 'hello', 'ztxlpkmf5tb5vpfuzd3gntldp4', 5 ],
-    [ 'héllo 🌍', '4wankw6j3k5rseycis4zd4h6lu', 11 ],
+    [ '', 'ny2axhh7wn5jrhffittlw6akfq', 0 ],
+    [ 'hello', 'rivfzg3wrat54wuvklbyubcmmy', 5 ],
+    [ 'héllo 🌍', '7gw2xubdiru7bj6ijnvcnnjd2i', 11 ],
     [
         canonicalize({ z: { b: 2, a: 1 }, a: 'first' }),
-        'plz364zlhjympwbbekctnmc56i',
+        'tyhpoevqj3r4hai272mxduymtu',
         31,
     ],
     [
         canonicalize([ 'alpha', { z: false, a: null }, 3 ]),
-        'n5uybtrgxila37ieu7gghq3ppq',
+        'lpzhyok4zrloz7tlncxt6rajbe',
         32,
     ],
 ];
@@ -38,7 +36,7 @@ const STRING_VECTORS = [
 
 describe('publishing/addressing', ({ it }) => {
     it('pins the framework format', () => {
-        assertEqual(2, FORMAT);
+        assertEqual(3, FORMAT);
     });
 
     it('sorts object keys recursively and omits undefined properties', () => {
@@ -70,33 +68,31 @@ describe('publishing/addressing', ({ it }) => {
 
     it('matches upstream string blob digests and UTF-8 sizes', () => {
         for (const [ value, expectedHash, expectedSize ] of STRING_VECTORS) {
-            assertEqual(expectedHash, hashStringBlob(value));
+            assertEqual(expectedHash, hashBlob(value));
             assertEqual(expectedSize, getBlobSize(value));
-            assertMatches(/^[a-z2-7]{26}$/, hashStringBlob(value));
+            assertMatches(/^[a-z2-7]{26}$/, hashBlob(value));
         }
     });
 
     it('matches the upstream binary blob digest and size', () => {
         const bytes = Uint8Array.from([ 0, 1, 2, 127, 128, 255 ]).buffer;
 
-        assertEqual('fxjwehnnbukzorm5dlx5tsgd7a', hashArrayBufferBlob(bytes));
+        assertEqual('fxjwehnnbukzorm5dlx5tsgd7a', hashBlob(bytes));
         assertEqual(6, getBlobSize(bytes));
     });
 
-    it('separates string and binary blob domains', () => {
+    it('gives text and its UTF-8 bytes the same address', () => {
         const string = 'hello';
         const bytes = new TextEncoder().encode(string).buffer;
 
-        assert(hashStringBlob(string) !== hashArrayBufferBlob(bytes));
+        assertEqual(hashBlob(string), hashBlob(bytes));
     });
 
     it('rejects values that are not publishable blobs', () => {
-        const stringError = catchError(() => hashStringBlob(new Uint8Array()));
-        const binaryError = catchError(() => hashArrayBufferBlob(new Uint8Array()));
+        const hashError = catchError(() => hashBlob(new Uint8Array()));
         const sizeError = catchError(() => getBlobSize(new Uint8Array()));
 
-        assertEqual('TypeError', stringError.name);
-        assertEqual('TypeError', binaryError.name);
+        assertEqual('TypeError', hashError.name);
         assertEqual('TypeError', sizeError.name);
     });
 });

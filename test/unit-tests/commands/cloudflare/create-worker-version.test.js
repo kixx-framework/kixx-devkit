@@ -60,7 +60,7 @@ describe('create-worker-version output', ({ describe }) => {
         it('prints the undeployed line and no reconciliation section', () => {
             const text = render({ deployed: false, forcedDeploymentClasses: null, reconciliation: null });
 
-            assert(text.includes('Not deployed (pass --deploy)'), text);
+            assert(text.includes('Created undeployed'), text);
             assert(!text.includes('Durable Objects'), 'expected no reconciliation section');
             assert(!text.toLowerCase().includes('reconciliation'), 'expected no warning about its absence');
         });

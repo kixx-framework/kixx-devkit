@@ -1,7 +1,8 @@
-import path from 'node:path';
 import process from 'node:process';
 import CloudflareApiClient from '../../lib/cloudflare/cloudflare-api-client.js';
-import { deployWorkerVersion } from '../../lib/cloudflare/deploy-worker-version.js';
+import PublishingAPIClient from '../../lib/publishing/publishing-api-client.js';
+import deployCloudflareVersion from '../../lib/release/deploy-cloudflare-version.js';
+import UsageError from '../../lib/usage-error.js';
 import { subcommands } from './index.js';
 
 // The Worker name is environment-scoped, so it cannot be declared through
@@ -18,7 +19,7 @@ export default class CloudflareDeployVersionCommand {
         },
         force: {
             type: 'boolean',
-            description: 'Deploy without a local record that the version\'s BUILD_ID has published content',
+            description: 'Deploy without verifying the version\'s BUILD_ID through the Publishing API',
         },
     };
 
@@ -37,48 +38,62 @@ export default class CloudflareDeployVersionCommand {
 
     #projectDirectory;
     #cloudflareConfig;
+    #config;
     #secrets;
     #fileSystem;
-    #createApiClient;
-    #deployWorkerVersion;
-    #now;
+    #createCloudflareClient;
+    #createPublishingClient;
+    #deployCloudflareVersion;
 
     constructor(args) {
         const {
             projectDirectory,
             cloudflareConfig,
+            config,
             secrets,
             fileSystem,
-            createApiClient = (options) => new CloudflareApiClient(options),
-            deployWorkerVersion: deploy = deployWorkerVersion,
-            now,
+            createCloudflareClient = (options) => new CloudflareApiClient(options),
+            createPublishingClient = (options) => new PublishingAPIClient(options),
+            deployCloudflareVersion: deploy = deployCloudflareVersion,
         } = args ?? {};
 
         this.#projectDirectory = projectDirectory;
         this.#cloudflareConfig = cloudflareConfig;
+        this.#config = config;
         this.#secrets = secrets;
         this.#fileSystem = fileSystem;
-        this.#createApiClient = createApiClient;
-        this.#deployWorkerVersion = deploy;
-        this.#now = now;
+        this.#createCloudflareClient = createCloudflareClient;
+        this.#createPublishingClient = createPublishingClient;
+        this.#deployCloudflareVersion = deploy;
     }
 
     async run(options, versionId) {
         const { environment, force = false } = options ?? {};
-        const apiClient = this.#createApiClient(this.#secrets.cloudflare);
-        const result = await this.#deployWorkerVersion({
+        const origin = this.#config?.app?.environments?.[environment]?.origin;
+        const token = this.#secrets?.app?.environments?.[environment]?.publishingToken;
+        if (!force && (!origin || !token)) {
+            throw new UsageError(
+                `Missing Publishing API configuration for environment "${ environment }". ` +
+                'Configure its origin and publishingToken, or use --force to bypass the guard.',
+            );
+        }
+
+        const cloudflareClient = this.#createCloudflareClient(this.#secrets.cloudflare);
+        const publishingClient = force
+            ? null
+            : this.#createPublishingClient({ origin, token });
+        const result = await this.#deployCloudflareVersion({
             projectDirectory: this.#projectDirectory,
             environment,
             cloudflareConfig: this.#cloudflareConfig,
-            apiClient,
+            apiClient: cloudflareClient,
+            publishingClient,
             versionId,
             force,
             fileSystem: this.#fileSystem,
-            now: this.#now,
         });
-        const stateFilepath = path.relative(this.#projectDirectory, result.stateFilepath);
 
-        process.stdout.write(renderDeploymentResult(result, stateFilepath));
+        process.stdout.write(renderDeploymentResult(result));
 
         return 0;
     }
@@ -86,18 +101,22 @@ export default class CloudflareDeployVersionCommand {
 
 /**
  * @param {Object} result - Successful deployment result.
- * @param {string} stateFilepath - Project-relative application state path.
  * @returns {string} Terminal output ending in a newline.
  */
-export function renderDeploymentResult(result, stateFilepath) {
-    return [
+export function renderDeploymentResult(result) {
+    const lines = [
         `Environment: ${ result.environment }`,
         `Worker:      ${ result.workerName }`,
         `Version:     ${ result.versionId }`,
         `BUILD_ID:    ${ result.buildId }`,
         '',
         'Deployed to 100% of traffic.',
-        `Wrote ${ stateFilepath }`,
-        '',
-    ].join('\n');
+    ];
+
+    if (result.guardBypassed) {
+        lines.push('Publishing API guard bypassed with --force.');
+    }
+
+    lines.push('');
+    return lines.join('\n');
 }

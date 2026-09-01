@@ -26,11 +26,6 @@ export default class CloudflareCreateWorkerVersionCommand {
             type: 'boolean',
             description: 'Upload a version even when nothing has changed',
         },
-        deploy: {
-            type: 'boolean',
-            description: 'Route all traffic to the created version. Required only when introducing a ' +
-                'Durable Object class on a Worker that is already deployed',
-        },
     };
 
     static requiredSecrets = [
@@ -50,7 +45,7 @@ export default class CloudflareCreateWorkerVersionCommand {
     }
 
     async run(options) {
-        const { environment, force = false, deploy = false } = options ?? {};
+        const { environment, force = false } = options ?? {};
 
         if (!environment) {
             throw new UsageError('The --environment option is required');
@@ -68,7 +63,6 @@ export default class CloudflareCreateWorkerVersionCommand {
             cloudflareConfig: this.#cloudflareConfig,
             apiClient,
             force,
-            deploy,
             fileSystem,
         });
 
@@ -178,7 +172,7 @@ function renderDeployment(result, deploymentPending) {
             return [ 'Created undeployed; deployment waits for content publish' ];
         }
 
-        return [ 'Not deployed (pass --deploy)' ];
+        return [ 'Created undeployed' ];
     }
 
     if (!result.forcedDeploymentClasses) {

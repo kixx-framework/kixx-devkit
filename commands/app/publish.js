@@ -1,191 +1,170 @@
-import path from 'node:path';
 import process from 'node:process';
-import publishApplicationContent from '../../lib/publishing/publish-application-content.js';
+
+import assignRelease from '../../lib/publishing/assign-release.js';
+import defaultFileSystem from '../../lib/file-system.js';
+import publishContent from '../../lib/publishing/publish-content.js';
+import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';
+import resolveRunningBuild from '../../lib/publishing/resolve-running-build.js';
+import scanContentSources from '../../lib/publishing/scan-content-sources.js';
 import { subcommands } from './index.js';
 
 export default class AppPublishCommand {
 
     static description = subcommands.publish.description;
-
     static options = {
-        environment: {
-            type: 'string',
-            short: 'e',
-            description: 'Required application environment to publish',
-        },
-        'build-id': {
-            type: 'string',
-            description: 'Build id to publish; defaults to the environment\'s recorded live build',
-        },
-        bootstrap: {
-            type: 'boolean',
-            description: 'Seed an empty closure for a build that has never had content',
-        },
-        'dry-run': {
-            type: 'boolean',
-            description: 'Scan and diff content without uploading, committing, or writing local state',
-        },
-        verbose: {
-            type: 'boolean',
-            description: 'List every resource with its hash and disposition',
-        },
-        origin: {
-            type: 'string',
-            description: 'Override app.environments.<environment>.origin from .kixx/config.json',
-        },
-        token: {
-            type: 'string',
-            description: 'Override app.environments.<environment>.publishingToken from .kixx/secrets.json',
-        },
+        environment: { type: 'string', short: 'e', description: 'Required application environment' },
+        'build-id': { type: 'string', description: 'Build id; defaults to discovery\'s running build' },
+        'dry-run': { type: 'boolean', description: 'Preview the server-backed object diff without writes' },
+        verbose: { type: 'boolean', description: 'List every resource and disposition' },
+        origin: { type: 'string', description: 'Override the configured Publishing API origin' },
+        token: { type: 'string', description: 'Override the configured Publishing API token' },
     };
 
-    #projectDirectory;
-    #config;
-    #secrets;
-    #publishApplicationContent;
+    #args;
 
     constructor(args) {
-        const {
-            projectDirectory,
-            config,
-            secrets,
-            publishApplicationContent: publish = publishApplicationContent,
-        } = args ?? {};
-
-        this.#projectDirectory = projectDirectory;
-        this.#config = config;
-        this.#secrets = secrets;
-        this.#publishApplicationContent = publish;
+        this.#args = args ?? {};
     }
 
     async run(options) {
-        const {
-            environment,
-            bootstrap = false,
-            'dry-run': dryRun = false,
-            verbose = false,
-        } = options ?? {};
-
-        const result = await this.#publishApplicationContent({
-            projectDirectory: this.#projectDirectory,
-            environment,
-            config: this.#config,
-            secrets: this.#secrets,
-            buildId: options?.['build-id'],
+        const connection = resolvePublishingEnvironment({
+            environment: options?.environment,
+            config: this.#args.config,
+            secrets: this.#args.secrets,
             origin: options?.origin,
             token: options?.token,
-            bootstrap,
-            dryRun,
+            createClient: this.#args.createClient,
+        });
+        const buildId = await (this.#args.resolveRunningBuild ?? resolveRunningBuild)({
+            client: connection.client,
+            buildId: options?.['build-id'],
+        });
+        const scan = this.#args.scan ?? scanContentSources;
+        const contentSources = await scan(this.#args.projectDirectory, {
+            fileSystem: this.#args.fileSystem ?? defaultFileSystem,
+        });
+        const result = await (this.#args.publishContent ?? publishContent)({
+            client: connection.client,
+            contentSources,
+            dryRun: options?.['dry-run'] ?? false,
+            provenance: { client: 'kixx-devkit', intendedForBuildId: buildId },
         });
 
-        process.stdout.write(renderPublishResult({
-            result,
-            environment: result.environment,
-            origin: result.origin,
-            verbose,
-            stateFilepath: result.stateFilepath
-                ? path.relative(this.#projectDirectory, result.stateFilepath)
-                : null,
-        }));
+        if (!result.dryRun) {
+            await (this.#args.assignRelease ?? assignRelease)({
+                client: connection.client,
+                buildId,
+                releaseId: result.releaseId,
+                reason: 'publish',
+            });
+        }
 
+        process.stdout.write(renderPublishResult({
+            result: { ...result, buildId },
+            environment: connection.environment,
+            origin: connection.origin,
+            verbose: options?.verbose ?? false,
+        }));
         return 0;
     }
 }
 
 /**
- * Formats the publish result without exposing the Publishing API token.
- * @param {Object} args - Output details.
- * @param {Object} args.result - Structured result from `publishContent()`.
- * @param {string} args.environment - Published environment.
- * @param {string} args.origin - Publishing API origin.
- * @param {boolean} args.verbose - Whether to list every resource.
- * @param {string|null} args.stateFilepath - Written state path, or null.
- * @returns {string} Terminal output ending in a newline.
+ * Formats a create-and-assign publishing result.
+ * @param {Object} args - Output details
+ * @returns {string} Terminal output ending in a newline
  */
 export function renderPublishResult(args) {
-    const {
+    const { result, environment, origin, verbose } = args ?? {};
+    return renderReleaseResult({
         result,
         environment,
         origin,
+        buildId: result.buildId,
         verbose,
-        stateFilepath,
+    });
+}
+
+/**
+ * Formats a Release result without exposing credentials.
+ * @param {Object} args - Output details
+ * @returns {string} Terminal output ending in a newline
+ */
+export function renderReleaseResult(args) {
+    const {
+        result,
+        environment = result.environment,
+        origin = result.origin,
+        buildId,
+        verbose,
     } = args ?? {};
     const totalCount = result.matchedCount + result.uploadedCount;
     const uploadLabel = result.dryRun ? 'would upload' : 'uploaded';
     const lines = [
         `Environment: ${ environment }`,
         `Origin:      ${ origin }`,
-        `BUILD_ID:   ${ result.buildId }`,
+    ];
+
+    if (buildId) {
+        lines.push(`BUILD_ID:   ${ buildId }`);
+    }
+
+    lines.push(
         '',
         `Resources: ${ totalCount } total; ${ result.matchedCount } matched; ` +
             `${ result.uploadedCount } ${ uploadLabel }`,
-    ];
-
-    appendUploadedResources(lines, result);
-    appendUnmatchedFiles(lines, result.unmatchedFiles);
+        '',
+        result.dryRun ? 'Resources that would upload:' : 'Uploaded resources:',
+    );
+    appendResources(lines, result.uploadedResources);
+    lines.push('', 'Files not matched by a publishing convention:');
+    appendValues(lines, result.unmatchedFiles);
 
     if (verbose) {
+        lines.push('', 'All resources:');
         appendAllResources(lines, result.resources);
     }
 
     lines.push('');
-
     if (result.dryRun) {
-        lines.push('Dry run: no resources, closure, or local state were written.');
+        lines.push('Dry run: unvalidated preview; no objects, Release, or build pointer were written.');
     } else {
-        lines.push(`Closure: ${ result.closureHash } (${ result.nodeCount } nodes)`);
-        if (stateFilepath) {
-            lines.push(`Wrote ${ stateFilepath }`);
-        }
+        lines.push(`Release: ${ result.releaseId }`);
+        lines.push(`Objects: ${ result.objectCount }; ${ result.totalBytes } bytes`);
     }
-
     lines.push('');
     return lines.join('\n');
 }
 
-function appendUploadedResources(lines, result) {
-    const heading = result.dryRun ? 'Resources that would upload:' : 'Uploaded resources:';
-    lines.push('', heading);
-
-    if (result.uploadedResources.length === 0) {
-        lines.push('  (none)');
-        return;
-    }
-
-    for (const resource of result.uploadedResources) {
-        lines.push(`  ${ resource.type } ${ displayPathname(resource.pathname) }`);
-    }
-}
-
-function appendUnmatchedFiles(lines, unmatchedFiles) {
-    lines.push('', 'Files not matched by a publishing convention:');
-
-    if (unmatchedFiles.length === 0) {
-        lines.push('  (none)');
-        return;
-    }
-
-    for (const filepath of unmatchedFiles) {
-        lines.push(`  ${ filepath }`);
-    }
-}
-
-function appendAllResources(lines, resources) {
-    lines.push('', 'All resources:');
-
+function appendResources(lines, resources) {
     if (resources.length === 0) {
         lines.push('  (none)');
         return;
     }
-
     for (const resource of resources) {
-        lines.push(
-            `  ${ resource.disposition.padEnd(8) } ${ resource.type } ` +
-            `${ displayPathname(resource.pathname) } ${ resource.hash } ${ resource.size } bytes`,
-        );
+        lines.push(`  ${ resource.type } ${ resource.pathname || '/' }`);
     }
 }
 
-function displayPathname(pathname) {
-    return pathname || '/';
+function appendValues(lines, values) {
+    if (values.length === 0) {
+        lines.push('  (none)');
+        return;
+    }
+    for (const value of values) {
+        lines.push(`  ${ value }`);
+    }
+}
+
+function appendAllResources(lines, resources) {
+    if (resources.length === 0) {
+        lines.push('  (none)');
+        return;
+    }
+    for (const resource of resources) {
+        lines.push(
+            `  ${ resource.disposition.padEnd(8) } ${ resource.type } ` +
+            `${ resource.pathname || '/' } ${ resource.hash } ${ resource.size } bytes`,
+        );
+    }
 }

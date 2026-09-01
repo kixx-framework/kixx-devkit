@@ -139,7 +139,7 @@ Task 6 depends on nothing and may land before or after the rest, except that its
 
 ### Task 1: Interactive credential prompts with a non-interactive bypass
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** None
 
@@ -205,12 +205,38 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: `lib/prompt.js` implemented with `promptForValue()` and
+  `promptForValueTwice()`; full test coverage; lint clean.
+- Current state: Complete. All acceptance criteria met.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - Named the exports `promptForValue()` / `promptForValueTwice()` rather than
+    anything credential-specific, per the "no knowledge of admin credentials"
+    scope note. Callers pass `envVar` and `label`.
+  - Masking is implemented by forcing `terminal: true` on the `readline`
+    interface and overriding the undocumented `rl._writeToOutput` hook to a
+    no-op — the standard workaround, since `readline` has no public silent-echo
+    option. Not toggling raw mode by hand, per the design note.
+  - In the `line` handler, `resolve()` must be called before `rl.close()`.
+    `close()` emits `'close'` synchronously, which the same handler treats as
+    cancellation; resolving first makes that later rejection a harmless no-op
+    on an already-settled promise. Got this backwards initially and the tests
+    caught it immediately (UsageError instead of the typed value).
+  - Tests fake a TTY with `node:stream` `PassThrough` pairs, setting
+    `.isTTY = true/false` manually on the input side, per the design note that
+    the module must read the injected stream's `isTTY` rather than
+    `process.stdin.isTTY`. `PassThrough` lacks `setRawMode`, which `readline`
+    tolerates by silently skipping raw-mode setup.
+- Actual files changed:
+  - `lib/prompt.js` (new)
+  - `test/unit-tests/lib/prompt.test.js` (new)
+- Validation run:
+  - `node run-tests.js test/unit-tests/lib/prompt.test.js` — 8/8 passed
+  - `node run-tests.js` (full suite) — 387/387 passed
+  - `npm run lint` — clean
+  - Manual real-terminal check of the masked prompt was not performed in this
+    session (no interactive TTY available to the executor); the automated
+    fake-TTY tests exercise the same code path forced via `terminal: true`.
 - Blockers: None.
 
 
@@ -218,7 +244,7 @@ Record the actual files changed in the handoff notes.
 
 ### Task 2: Admin API client and typed protocol errors
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `tmp/admin-api.md` — all sections
 
@@ -304,12 +330,48 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: `lib/admin/admin-api-client.js` and `lib/admin/admin-api-error.js`
+  implemented with full test coverage; lint clean.
+- Current state: Complete. All acceptance criteria met.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - API error codes are inconsistent in casing: the three migration conflict
+    codes are the full class names (`MigrationAlreadyAppliedError`,
+    `MigrationCursorConflictError`, `MigrationConcurrencyError`), but the auth
+    failures are shortened (`InvalidCredentials`, `InvalidInvite`, without the
+    `Error` suffix). Confirmed by grepping `tmp/admin-api.md` directly rather
+    than assuming a uniform pattern like the publishing API's error codes.
+    `ERROR_CLASSES` in `lib/admin/admin-api-error.js` maps both forms.
+  - Auth scheme is modeled by having `#request()` accept an `authorization`
+    option that defaults (via a lazy default-parameter expression) to
+    `#basicAuthorization()`. `acceptInvite()` always passes its own `Bearer`
+    value explicitly, so the Basic code path is structurally unreachable from
+    that method — satisfies "the invite call should not be able to reach the
+    Basic code path" without a second client class or a flag.
+  - Retry policy is centralized in one `#isRetryable(status, isWrite)` check
+    (429 always retryable; 5xx only when `!isWrite`) and one `catch` branch
+    keyed on `isWrite`, rather than duplicating the loop per verb.
+  - Considered giving `createPublishingApiToken()` a private field to redact
+    the freshly minted token from any later error in the same client instance,
+    but removed it: the token cannot appear in a response earlier than the one
+    that mints it, so there was nothing for that redaction to protect against.
+    Redaction of the minted token is exercised for the response that returns
+    it (never an error case for that call); password and invite-token
+    redaction on error responses are covered directly.
+  - Redaction happens per-request: `#request()` builds `secrets` from
+    `this.#password` plus any `redact` list the caller supplies (`acceptInvite`
+    passes the invite token and the new password), and both the message and
+    the structured `errors` array are redacted before `createAdminApiError()`
+    constructs the typed error — never after.
+- Actual files changed:
+  - `lib/admin/admin-api-client.js` (new)
+  - `lib/admin/admin-api-error.js` (new)
+  - `test/unit-tests/lib/admin/admin-api-client.test.js` (new)
+  - `test/unit-tests/lib/admin/admin-api-error.test.js` (new)
+- Validation run:
+  - `node run-tests.js test/unit-tests/lib/admin` — 17/17 passed
+  - `node run-tests.js` (full suite) — 404/404 passed
+  - `npm run lint` — clean
 - Blockers: None.
 
 
@@ -317,7 +379,7 @@ Record the actual files changed in the handoff notes.
 
 ### Task 3: Shared environment origin resolution
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Task 2
 **Documentation:** None
 
@@ -387,12 +449,41 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Extracted `resolveEnvironmentOrigin()` into
+  `lib/resolve-environment-origin.js`; `resolvePublishingEnvironment()` now
+  calls it for origin resolution and keeps its own `resolveSetting()` helper
+  only for the token lookup; added `lib/admin/resolve-admin-environment.js`.
+  Full test coverage added; lint clean.
+- Current state: Complete. All acceptance criteria met.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - Put the shared helper at `lib/resolve-environment-origin.js` (not inside
+    `lib/publishing/` or `lib/admin/`) since it is owned by neither subsystem.
+  - Preserved exact error message text by copying the three message templates
+    verbatim from the original `resolveSetting()` origin branch — confirmed
+    byte-identical via the new `resolve-environment-origin.test.js` and by
+    rerunning the untouched `environment-errors.test.js` and the rest of the
+    `app`/`publishing` suites.
+  - `resolvePublishingEnvironment()` deliberately still resolves `origin`
+    before `token`, so a missing `--environment` throws from the origin helper
+    before the token lookup ever runs (which would otherwise build a
+    key path like `app.environments.undefined.publishingToken`).
+  - `resolveAdminEnvironment()` takes `email`/`password` as plain arguments and
+    forwards them straight to `createClient()`; it does no prompting and stays
+    synchronous, per the scope note keeping Task 1's terminal I/O out of this
+    module.
+- Actual files changed:
+  - `lib/resolve-environment-origin.js` (new)
+  - `lib/admin/resolve-admin-environment.js` (new)
+  - `lib/publishing/resolve-publishing-environment.js` (modified: origin
+    resolution delegates to the shared helper)
+  - `test/unit-tests/lib/resolve-environment-origin.test.js` (new)
+  - `test/unit-tests/lib/admin/resolve-admin-environment.test.js` (new)
+- Validation run:
+  - `node run-tests.js test/unit-tests/lib/admin/resolve-admin-environment.test.js test/unit-tests/lib/resolve-environment-origin.test.js` — 9/9 passed
+  - `node run-tests.js test/unit-tests/commands/app test/unit-tests/lib/publishing` — 75/75 passed, unchanged
+  - `node run-tests.js` (full suite) — 413/413 passed
+  - `npm run lint` — clean
 - Blockers: None.
 
 
@@ -400,7 +491,7 @@ Record the actual files changed in the handoff notes.
 
 ### Task 4: Bootstrap commands — accept-invite and create-publishing-token
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Tasks 1, 2, 3
 **Documentation:** `tmp/admin-api.md` — "Accept an admin invite", "Create a publishing API token", "Bootstrap the first admin", "Mint a publishing credential"
 
@@ -484,12 +575,51 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: `commands/admin/accept-invite.js`, `commands/admin/create-publishing-token.js`,
+  their `commands/admin/index.js` entries, and their tests. Lint clean, full
+  suite green.
+- Current state: Complete except the manual against-a-real-server check
+  (documented exception below).
+- Remaining: Nothing automatable. Manual verification against a running
+  `http://localhost:2026` Admin API was not performed this session — no local
+  dev server was started. A later session (or the user) should run
+  `node kixx.js admin accept-invite -e <env>` and
+  `node kixx.js admin create-publishing-token -e <env>` against a real
+  deployment before treating the bootstrap flow as field-verified.
+- Decisions and discoveries:
+  - Both commands inject `promptForValue`/`promptForValueTwice` and
+    `resolveAdminEnvironment` through the constructor args object (mirroring
+    `assignRelease` injection in `commands/app/rollback.js`), so unit tests
+    supply canned answers and a fake client with no terminal and no network.
+  - The "fails with UsageError naming the env var when stdin is not a TTY"
+    criterion needs no special test wiring: the test runner's own `stdin` is
+    not a TTY, so constructing the command with only `config` (no injected
+    prompt) and calling `run()` exercises the real `promptForValue()` and
+    hits that branch directly.
+  - `accept-invite` catches `InvalidInviteError` at the command layer and
+    re-throws a `UsageError` with the operator-facing guidance sentence, so
+    the runner prints only that sentence (per `commands/README.md`'s
+    UsageError-prints-message-alone contract) rather than the raw protocol
+    error.
+  - `create-publishing-token` does not special-case `InvalidCredentialsError`
+    — not required by this task's acceptance criteria — so it prints in full
+    via the runner's generic error path.
+  - `--roles` uses `{ type: 'string', multiple: true }` so `options.roles` is
+    `undefined` when omitted (matches "omitted from the request when not
+    supplied") rather than defaulting to an empty array.
+- Actual files changed:
+  - `commands/admin/accept-invite.js` (new)
+  - `commands/admin/create-publishing-token.js` (new)
+  - `commands/admin/index.js` (modified: two new `subcommands` entries)
+  - `test/unit-tests/commands/admin/accept-invite.test.js` (new)
+  - `test/unit-tests/commands/admin/create-publishing-token.test.js` (new)
+- Validation run:
+  - `node run-tests.js test/unit-tests/commands/admin` — 7/7 passed
+  - `node run-tests.js` (full suite) — 420/420 passed
+  - `npm run lint` — clean
+  - `node kixx.js admin --help` — both sub-commands listed
+  - `node kixx.js admin accept-invite --help` / `create-publishing-token --help` — usage renders
+  - Manual against a real server — not run (see Remaining above)
 - Blockers: None.
 
 
@@ -497,7 +627,7 @@ Record the actual files changed in the handoff notes.
 
 ### Task 5: Migration commands — list-migrations and run-migration
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** Tasks 1, 2, 3
 **Documentation:** `tmp/admin-api.md` — "List migrations", "Run a migration batch", "Safely apply a migration"
 
@@ -596,12 +726,59 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: `commands/admin/list-migrations.js`, `commands/admin/run-migration.js`,
+  their `commands/admin/index.js` entries, and their tests. Also added
+  `promptForConfirmation()` to `lib/prompt.js` (see discovery below) with its
+  own tests. Lint clean, full suite green.
+- Current state: Complete except the manual against-a-real-server check
+  (documented exception below).
+- Remaining: Manual verification against a running `http://localhost:2026`
+  Admin API — listing migrations, driving dry-run batches to completion,
+  driving real batches to completion, and confirming `list-migrations` then
+  reports `applied` — was not performed this session; no local dev server was
+  available to the executor.
+- Decisions and discoveries:
+  - `--force` needs a typed confirmation that is not a credential and has no
+    environment-variable bypass (`--yes` is the bypass). Rather than bolt this
+    onto `promptForValue()`, added a new `promptForConfirmation(label,
+    expected)` export to `lib/prompt.js`: no `envVar`, TTY-gated, compares the
+    typed line to an exact expected string. This slightly extends Task 1's
+    module after that task was already marked complete; Task 1's existing
+    exports and tests are untouched, and the new function has its own tests in
+    `test/unit-tests/lib/prompt.test.js`, all still green.
+  - `run-migration` validates `--dry-run`/`--force` mutual exclusion and the
+    `--cursor`-requires-`--dry-run` rule, prompts for admin credentials,
+    resolves the connection, prompts for `--force` confirmation (skippable
+    with `--yes`), echoes environment/origin only for a real run, issues
+    exactly one batch, and renders the result — in that order, matching the
+    plan's ordering rationale (fail fast on argument shape before touching the
+    terminal for credentials or network).
+  - The three migration conflict errors get distinct `UsageError` guidance in
+    a small `runBatch()` wrapper in `commands/admin/run-migration.js`, keeping
+    the `instanceof` checks in one place rather than scattered through `run()`.
+  - `list-migrations` renders only `id`, `status`, `description`, plus `error`
+    for a failed migration — the plan's own priority list — so a `pending`
+    migration's null `stats`/`batchCount`/etc. are never touched and never
+    printed, satisfying "no null noise" without special-casing nulls.
+  - No shared rendering module was created under `lib/admin/`: the
+    list-migrations table and the single-migration batch-result rendering
+    don't overlap enough to justify one, per the plan's "if it grows beyond
+    trivial" qualifier.
+- Actual files changed:
+  - `commands/admin/list-migrations.js` (new)
+  - `commands/admin/run-migration.js` (new)
+  - `commands/admin/index.js` (modified: two new `subcommands` entries)
+  - `lib/prompt.js` (modified: added `promptForConfirmation()`)
+  - `test/unit-tests/commands/admin/list-migrations.test.js` (new)
+  - `test/unit-tests/commands/admin/run-migration.test.js` (new)
+  - `test/unit-tests/lib/prompt.test.js` (modified: added confirmation tests)
+- Validation run:
+  - `node run-tests.js test/unit-tests/commands/admin` — 18/18 passed
+  - `node run-tests.js test/unit-tests/lib/prompt.test.js` — 11/11 passed
+  - `node run-tests.js` (full suite) — 434/434 passed
+  - `npm run lint` — clean
+  - `node kixx.js admin --help`, `run-migration --help`, `list-migrations --help` — all render
+  - Manual against a real server — not run (see Remaining above)
 - Blockers: None.
 
 
@@ -609,7 +786,7 @@ Record the actual files changed in the handoff notes.
 
 ### Task 6: Consolidate documentation by top level command
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** existing files under `docs/`
 
@@ -688,10 +865,48 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Wrote `docs/app.md`, `docs/cloudflare.md`, `docs/admin.md`, and
+  `docs/configuration.md`; deleted the eight old per-sub-command files; updated
+  `README.md`'s link list and "Available workflows" list.
+- Current state: Complete. All acceptance criteria met.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - `docs/configuration.md`'s two-layer-merge description is sourced from the
+    JSDoc module comment in `lib/config-loader.js` (home layer merged under
+    the project layer, both deep-frozen) — that was the authoritative existing
+    description; none of the eight old docs stated it themselves, they only
+    named the two file paths repeatedly.
+  - `docs/cloudflare.md` keeps `create-worker-version`'s full pipeline detail
+    (all 8 phases, the sample-app section) verbatim from the old file — that
+    content is specific to the command, not restated boilerplate. Only the
+    credential/settings sentences that were pure repetition across files were
+    replaced with a link to `docs/configuration.md`.
+  - `docs/release.md`'s old relative links to `create-worker-version.md` and
+    `publish.md` became same-file section links (`create-worker-version` above
+    and `app.md`), since `release` now lives in the same file as
+    `create-worker-version`.
+  - The eight old files' content was carried over in full — verified by
+    reading each new file against its source(s) rather than summarizing.
+  - Interpreted "no remaining file in the repository links to a deleted docs
+    path" as covering live navigational links (`README.md`, and the one
+    inter-doc link in the old `release.md`), not the historical `agents/plans/`
+    documents that record what earlier tasks did — rewriting those would
+    falsify the historical record. Confirmed via `grep` that no other file
+    contains a markdown link to any of the eight deleted paths.
+  - Added the five `admin` sub-commands to README's "Available workflows"
+    list. The task text only required fixing link targets, but the list would
+    otherwise omit an entire top-level command with real capabilities as of
+    this plan; `gen-secure-token` existed before this plan and was already
+    undocumented in that list, so this closes that gap too.
+- Actual files changed:
+  - `docs/app.md`, `docs/cloudflare.md`, `docs/admin.md`, `docs/configuration.md` (new)
+  - `docs/assign-build.md`, `docs/create-release.md`, `docs/publish.md`, `docs/rollback.md` (deleted)
+  - `docs/create-worker.md`, `docs/create-worker-version.md`, `docs/deploy-version.md`, `docs/release.md` (deleted)
+  - `README.md` (modified: link list and workflow list)
+- Validation run:
+  - `grep` across the repository for links to each deleted path — none found
+    outside `agents/plans/` historical records
+  - Read each new file against its deleted source(s) end to end
+  - `node run-tests.js` (full suite) — 434/434 passed (no JS changed by this task)
+  - `npm run lint` — clean
 - Blockers: None.

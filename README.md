@@ -20,12 +20,14 @@ Available workflows:
 - `kixx.js cloudflare create-worker-version` — upload an undeployed Worker version.
 - `kixx.js cloudflare deploy-version` — route traffic to an existing Worker version.
 - `kixx.js cloudflare release` — stage content and deploy a Worker release.
+- `kixx.js admin gen-secure-token` — generate a secure bootstrap token.
+- `kixx.js admin accept-invite` — redeem an invite and create an admin account.
+- `kixx.js admin create-publishing-token` — mint a Publishing API token.
+- `kixx.js admin list-migrations` — list registered migrations and their status.
+- `kixx.js admin run-migration` — run one bounded batch of a migration.
 
-See [create-release](docs/create-release.md),
-[assign-build](docs/assign-build.md), [publish](docs/publish.md),
-[rollback](docs/rollback.md), [create-worker](docs/create-worker.md),
-[create-worker-version](docs/create-worker-version.md),
-[deploy-version](docs/deploy-version.md), and [release](docs/release.md) for
+See [app.md](docs/app.md), [cloudflare.md](docs/cloudflare.md),
+[admin.md](docs/admin.md), and [configuration.md](docs/configuration.md) for
 usage and configuration.
 
 Development

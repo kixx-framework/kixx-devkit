@@ -96,7 +96,7 @@ symlinks.
 
 **Severity:** Medium
 
-**Status:** Open
+**Status:** Completed
 
 **Trigger**
 

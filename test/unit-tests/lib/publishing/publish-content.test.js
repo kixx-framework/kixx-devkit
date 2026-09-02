@@ -108,6 +108,32 @@ describe('publishing/publish-content', ({ it }) => {
         }
     });
 
+    it('rejects every oversized object before starting uploads', async () => {
+        const capabilities = makeCapabilities();
+        capabilities.limits.maxObjectBytes = 3;
+        const resources = [
+            makeResource('StaticAsset', 'small.css', 'small-hash', 'ok'),
+            makeResource('StaticAsset', 'large-a.css', 'large-hash', 'éé'),
+            makeResource('StaticAsset', 'large-b.css', 'large-hash', 'éé'),
+        ];
+        resources[1].sourceFiles = [ 'static-assets/large-a.css' ];
+        resources[2].sourceFiles = [ 'public/large-b.css' ];
+        const client = makeClient({ capabilities });
+
+        const caught = await catchAsyncError(() => {
+            return publishContent(makeArgs(client, resources));
+        });
+
+        assertEqual('UsageError', caught.name);
+        assertMatches('server limit of 3 bytes', caught.message);
+        assertMatches('large-a.css": 4 bytes; sources: static-assets/large-a.css', caught.message);
+        assertMatches('large-b.css": 4 bytes; sources: public/large-b.css', caught.message);
+        assertMatches('Nothing was published.', caught.message);
+        assertEqual(1, client.statusChecks.length);
+        assertEqual(0, client.uploads.length);
+        assertEqual(0, client.releases.length);
+    });
+
     it('waits for in-flight uploads and prevents Release creation after failure', async () => {
         const resources = [
             makeResource('StaticAsset', 'one.css', 'one-hash'),

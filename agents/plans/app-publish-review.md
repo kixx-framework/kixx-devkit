@@ -26,7 +26,7 @@ Summary
 | --- | --- | --- | --- |
 | APP-PUBLISH-1 | High | Source-directory symlinks can publish files outside the project | Fixed |
 | APP-PUBLISH-2 | Medium | An empty page template fails only after the upload phase starts | Fixed |
-| APP-PUBLISH-3 | Medium | Assignment failures hide the Release created by the same command | Open |
+| APP-PUBLISH-3 | Medium | Assignment failures hide the Release created by the same command | Fixed |
 | APP-PUBLISH-4 | Low | Unexpected positional arguments are silently ignored | Open |
 
 
@@ -167,6 +167,18 @@ assignment error skips the output containing `result.releaseId`.
 - Operators may rerun the full scan/upload/create flow or incorrectly assume
   no remote state was written. Content idempotence limits damage, but the
   failure report is operationally incomplete.
+
+**Fix applied**
+
+`commands/app/publish.js` now catches an assignment failure and rethrows a
+new `ReleaseAssignmentError` (exported alongside the command) carrying
+`releaseId`, `buildId`, and the original failure as `cause`. Its message
+names the created Release, the target build, the underlying error, and the
+exact recovery command:
+`kixx.js app assign-build --environment <env> --build-id <id> --release-id <id>`.
+Tests added: "reports the Release id and a recovery command when assignment
+fails" and "names the release id in a build pointer conflict during
+assignment" in `test/unit-tests/commands/app/publish.test.js`.
 
 **Suggested fix**
 

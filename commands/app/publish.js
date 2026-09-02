@@ -8,6 +8,46 @@ import resolveRunningBuild from '../../lib/publishing/resolve-running-build.js';
 import scanContentSources from '../../lib/publishing/scan-content-sources.js';
 import { subcommands } from './index.js';
 
+/**
+ * A Release that was created successfully but could not be assigned to a
+ * build pointer. Carries the Release id so an operator can complete the
+ * assignment separately instead of losing track of already-written content.
+ */
+export class ReleaseAssignmentError extends Error {
+
+    /**
+     * @param {string} message - Operator-facing failure description
+     * @param {Object} options - Failure details
+     * @param {string} options.releaseId - Release that was created
+     * @param {string} options.buildId - Build pointer that was not assigned
+     * @param {Error} options.cause - Underlying assignment failure
+     */
+    constructor(message, options) {
+        const { releaseId, buildId, cause } = options ?? {};
+
+        super(message, { cause });
+
+        Object.defineProperties(this, {
+            name: {
+                enumerable: true,
+                value: this.constructor.name,
+            },
+            code: {
+                enumerable: true,
+                value: this.constructor.name,
+            },
+            releaseId: {
+                enumerable: true,
+                value: releaseId,
+            },
+            buildId: {
+                enumerable: true,
+                value: buildId,
+            },
+        });
+    }
+}
+
 export default class AppPublishCommand {
 
     static description = subcommands.publish.description;
@@ -51,12 +91,25 @@ export default class AppPublishCommand {
         });
 
         if (!result.dryRun) {
-            await (this.#args.assignRelease ?? assignRelease)({
-                client: connection.client,
-                buildId,
-                releaseId: result.releaseId,
-                reason: 'publish',
-            });
+            try {
+                await (this.#args.assignRelease ?? assignRelease)({
+                    client: connection.client,
+                    buildId,
+                    releaseId: result.releaseId,
+                    reason: 'publish',
+                });
+            } catch (cause) {
+                // The Release already exists on the server at this point.
+                // Reporting only the assignment failure would hide that and
+                // strand the operator without the id needed to recover.
+                throw new ReleaseAssignmentError(
+                    `Release "${ result.releaseId }" was created but could not be assigned to ` +
+                    `build "${ buildId }": ${ cause.message }\n` +
+                    'Recover with: kixx.js app assign-build --environment ' +
+                    `${ options?.environment } --build-id ${ buildId } --release-id ${ result.releaseId }`,
+                    { releaseId: result.releaseId, buildId, cause },
+                );
+            }
         }
 
         process.stdout.write(renderPublishResult({

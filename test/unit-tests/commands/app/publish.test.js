@@ -3,6 +3,7 @@ import { assertEqual, assertMatches } from 'kixx-assert';
 import { describe, MockTracker } from 'kixx-test';
 
 import AppPublishCommand from '../../../../commands/app/publish.js';
+import { BuildPointerConflictError } from '../../../../lib/publishing/publishing-api-error.js';
 
 describe('AppPublishCommand', ({ it }) => {
     it('creates and assigns a Release to discovery\'s running build', async () => {
@@ -38,6 +39,62 @@ describe('AppPublishCommand', ({ it }) => {
         tracker.reset();
     });
 
+    it('reports the Release id and a recovery command when assignment fails', async () => {
+        const tracker = new MockTracker();
+        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const calls = [];
+        const command = makeCommand({
+            calls,
+            assignRelease: async () => {
+                calls.push('assign');
+                throw new Error('network unreachable');
+            },
+        });
+
+        try {
+            const caught = await catchAsyncError(() => command.run({ environment: 'production' }));
+
+            assertEqual('ReleaseAssignmentError', caught.name);
+            assertMatches('release-id', caught.message);
+            assertMatches('running-build', caught.message);
+            assertMatches('network unreachable', caught.message);
+            assertMatches('app assign-build', caught.message);
+            assertMatches('--release-id release-id', caught.message);
+            assertMatches('--build-id running-build', caught.message);
+            assertEqual('release-id', caught.releaseId);
+            assertEqual('running-build', caught.buildId);
+            assertEqual(0, stdout.mock.callCount());
+        } finally {
+            tracker.reset();
+        }
+    });
+
+    it('names the release id in a build pointer conflict during assignment', async () => {
+        const tracker = new MockTracker();
+        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const calls = [];
+        const command = makeCommand({
+            calls,
+            assignRelease: async () => {
+                calls.push('assign');
+                throw new BuildPointerConflictError('conflict', {
+                    status: 409, method: 'PUT', url: 'https://x', attempts: 1,
+                });
+            },
+        });
+
+        try {
+            const caught = await catchAsyncError(() => command.run({ environment: 'production' }));
+
+            assertEqual('ReleaseAssignmentError', caught.name);
+            assertMatches('release-id', caught.message);
+            assertMatches('app assign-build', caught.message);
+            assertEqual(0, stdout.mock.callCount());
+        } finally {
+            tracker.reset();
+        }
+    });
+
     it('fails a null discovered build before scanning or publishing', async () => {
         const calls = [];
         const client = { discover: async () => ({ runningBuildId: null }) };
@@ -56,6 +113,11 @@ function makeCommand(args) {
         client = { discover: async () => ({ runningBuildId: 'running-build' }) },
         calls,
         dryRunResult = false,
+        assignRelease = async (options) => {
+            calls.push('assign');
+            calls.assignedBuildId = options.buildId;
+            calls.assignedReleaseId = options.releaseId;
+        },
     } = args;
 
     return new AppPublishCommand({
@@ -71,11 +133,7 @@ function makeCommand(args) {
             calls.push('publish');
             return makeResult(options.dryRun || dryRunResult);
         },
-        assignRelease: async (options) => {
-            calls.push('assign');
-            calls.assignedBuildId = options.buildId;
-            calls.assignedReleaseId = options.releaseId;
-        },
+        assignRelease,
     });
 }
 

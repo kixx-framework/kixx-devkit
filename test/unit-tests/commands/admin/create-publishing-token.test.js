@@ -56,7 +56,17 @@ describe('AdminCreatePublishingTokenCommand', ({ it }) => {
         delete process.env.KIXX_ADMIN_EMAIL;
         const command = new AdminCreatePublishingTokenCommand({ config: {} });
 
-        const caught = await catchAsyncError(() => command.run({ environment: 'production' }));
+        // promptForValue falls back to the real process.stdin here, so force
+        // isTTY off rather than relying on how this suite happens to run.
+        const wasTTY = process.stdin.isTTY;
+        process.stdin.isTTY = false;
+
+        let caught;
+        try {
+            caught = await catchAsyncError(() => command.run({ environment: 'production' }));
+        } finally {
+            process.stdin.isTTY = wasTTY;
+        }
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);

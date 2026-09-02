@@ -259,6 +259,44 @@ describe('publishing/scan-content-sources', ({ after, it }) => {
         assertEqual(false, result.resources.some(({ type }) => type === 'PageTemplate'));
     });
 
+    it('rejects a symlinked source root', async () => {
+        const outsideDirectory = await makeProject(directories, {
+            'secret.txt': 'Outside project',
+        });
+        const directory = await makeProject(directories, {
+            'pages/page.json': '{}',
+        });
+        await fsp.rm(path.join(directory, 'public'), { recursive: true, force: true });
+        await fsp.symlink(outsideDirectory, path.join(directory, 'public'));
+
+        const result = await scanContentSources(directory);
+        const problem = result.problems.find(({ code }) => code === 'symlink-source-root');
+
+        assert(problem, 'expected a symlink source root problem');
+        assertEqual('public', problem.filepath);
+        assertEqual(false, result.resources.some(({ pathname }) => pathname === 'secret.txt'));
+        assertEqual(0, result.unmatchedFiles.length);
+    });
+
+    it('rejects a symlinked entry beneath a source root', async () => {
+        const directory = await makeProject(directories, {
+            'pages/page.json': '{}',
+            'static-assets/real.txt': 'Real asset',
+        });
+        await fsp.symlink(
+            path.join(directory, 'static-assets', 'real.txt'),
+            path.join(directory, 'static-assets', 'linked.txt'),
+        );
+
+        const result = await scanContentSources(directory);
+        const problem = result.problems.find(({ code }) => code === 'symlink-source-file');
+
+        assert(problem, 'expected a symlink source file problem');
+        assertEqual('static-assets/linked.txt', problem.filepath);
+        assertEqual(false, result.resources.some(({ pathname }) => pathname === 'linked.txt'));
+        assertEqual(0, result.unmatchedFiles.length);
+    });
+
     it('publishes empty page and existing template bundles deterministically', async () => {
         const directory = await makeProject(directories, {
             'pages/page.json': '{}',

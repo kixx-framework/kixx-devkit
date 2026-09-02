@@ -24,7 +24,7 @@ Summary
 
 | ID | Severity | Finding | Status |
 | --- | --- | --- | --- |
-| APP-PUBLISH-1 | High | Source-directory symlinks can publish files outside the project | Open |
+| APP-PUBLISH-1 | High | Source-directory symlinks can publish files outside the project | Fixed |
 | APP-PUBLISH-2 | Medium | An empty page template fails only after the upload phase starts | Open |
 | APP-PUBLISH-3 | Medium | Assignment failures hide the Release created by the same command | Open |
 | APP-PUBLISH-4 | Low | Unexpected positional arguments are silently ignored | Open |
@@ -61,6 +61,17 @@ neither `problems` nor `unmatchedFiles`.
 The root case was reproduced with `public` linked to a temporary directory
 outside the project. The scanner returned its `secret.txt` as a `StaticAsset`,
 with no problem or unmatched-file entry.
+
+**Fix applied**
+
+`#walkFiles()` in `lib/publishing/scan-content-sources.js` now `lstat()`s each
+source root before walking it and reports a `symlink-source-root` problem if
+the root is a symbolic link, treating the root as absent. During traversal,
+an entry with `isSymbolicLink()` is reported as `symlink-source-file` and
+skipped rather than silently dropped, covering both nested file and directory
+symlinks. Tests added: "rejects a symlinked source root" and "rejects a
+symlinked entry beneath a source root" in
+`test/unit-tests/lib/publishing/scan-content-sources.test.js`.
 
 **Suggested fix**
 

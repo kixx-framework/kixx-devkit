@@ -259,6 +259,21 @@ describe('publishing/scan-content-sources', ({ after, it }) => {
         assertEqual(false, result.resources.some(({ type }) => type === 'PageTemplate'));
     });
 
+    it('rejects an empty page template as a source validation problem', async () => {
+        const directory = await makeProject(directories, {
+            'pages/page.json': JSON.stringify({ template: 'page.html' }),
+            'pages/page.html': '',
+        });
+
+        const result = await scanContentSources(directory);
+        const problem = result.problems.find(({ code }) => code === 'empty-page-template');
+
+        assert(problem, 'expected an empty page template problem');
+        assertEqual('pages/page.json', problem.filepath);
+        assertEqual('pages/page.html', problem.referencedFile);
+        assertEqual(false, result.resources.some(({ type }) => type === 'PageTemplate'));
+    });
+
     it('rejects a symlinked source root', async () => {
         const outsideDirectory = await makeProject(directories, {
             'secret.txt': 'Outside project',

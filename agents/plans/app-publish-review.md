@@ -25,7 +25,7 @@ Summary
 | ID | Severity | Finding | Status |
 | --- | --- | --- | --- |
 | APP-PUBLISH-1 | High | Source-directory symlinks can publish files outside the project | Fixed |
-| APP-PUBLISH-2 | Medium | An empty page template fails only after the upload phase starts | Open |
+| APP-PUBLISH-2 | Medium | An empty page template fails only after the upload phase starts | Fixed |
 | APP-PUBLISH-3 | Medium | Assignment failures hide the Release created by the same command | Open |
 | APP-PUBLISH-4 | Low | Unexpected positional arguments are silently ignored | Open |
 
@@ -118,6 +118,19 @@ This was reproduced with `pages/page.json` referencing an empty `page.html`.
 The scan had no problems; the real client failed with
 `PublishContentError`, phase `upload`, and `uploadObject() body must not be
 empty`.
+
+**Fix applied**
+
+`#scanPageTemplate()` in `lib/publishing/scan-content-sources.js` now reports
+an `empty-page-template` problem and skips resource creation when the
+referenced template file has zero length. Because `publishContent()` already
+calls `assertPublishableContentSources()` before discovery, an empty template
+now fails as a `UsageError` naming the source file, before any network call,
+in both real and dry-run publishes. The Publishing API v1 client's
+`size > 0` assertion in `uploadObject()` was left in place as a second line
+of defense. Test added: "rejects an empty page template as a source
+validation problem" in
+`test/unit-tests/lib/publishing/scan-content-sources.test.js`.
 
 **Suggested fix**
 

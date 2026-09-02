@@ -106,7 +106,7 @@ describe('publishing/scan-content-sources', ({ after, it }) => {
 
         const javaScript = findResource(result, 'StaticAsset', 'app.js');
         assertEqual(
-            'const text = "// literal"; \nconst regex = /\\/\\*/;',
+            'const text = "// literal";  \nconst regex = /\\/\\*/;',
             decode(javaScript.payload),
         );
 

@@ -7,10 +7,10 @@ import {
 
 
 describe('publishing/strip-asset-comments', ({ it }) => {
-    it('removes JavaScript line, block, and JSDoc comments outright', () => {
+    it('replaces JavaScript comments with lexical whitespace', () => {
         const source = '// first\nconst value = /* middle */ 1;\n/** last */';
 
-        assertEqual('\nconst value =  1;\n', stripJavaScriptComments(source));
+        assertEqual(' \nconst value =   1;\n ', stripJavaScriptComments(source));
     });
 
     it('preserves JavaScript hashbangs, strings, templates, and regular expressions', () => {
@@ -22,7 +22,34 @@ describe('publishing/strip-asset-comments', ({ it }) => {
             '// removed',
         ].join('\n');
 
-        assertEqual(source.replace('// removed', ''), stripJavaScriptComments(source));
+        assertEqual(source.replace('// removed', ' '), stripJavaScriptComments(source));
+    });
+
+    it('keeps keywords and identifiers as separate tokens', () => {
+        const source = 'globalThis.result = typeof/* separator */missingName;';
+
+        assertEqual(
+            'globalThis.result = typeof missingName;',
+            stripJavaScriptComments(source),
+        );
+    });
+
+    it('keeps punctuators as separate tokens', () => {
+        const source = 'const result = left +/* separator */+ right;';
+
+        assertEqual(
+            'const result = left + + right;',
+            stripJavaScriptComments(source),
+        );
+    });
+
+    it('preserves line terminators which affect semicolon insertion', () => {
+        const source = 'function getValue() { return/* first\r\nsecond\u2028third\u2029*/value; }';
+
+        assertEqual(
+            'function getValue() { return\r\n\u2028\u2029value; }',
+            stripJavaScriptComments(source),
+        );
     });
 
     it('reports JavaScript parse failures with a source location', () => {

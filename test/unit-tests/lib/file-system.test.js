@@ -51,6 +51,15 @@ describe('file system', ({ after, before, it }) => {
         assert(directoryStats.isDirectory());
     });
 
+    it('reads symbolic link metadata without following the link', async () => {
+        const filepath = path.join(directory, 'source-link.js');
+        await fsp.symlink(path.join(directory, 'source.js'), filepath);
+
+        const stats = await fileSystem.lstat(filepath);
+
+        assert(stats.isSymbolicLink());
+    });
+
     it('distinguishes files from directories and absent paths', async () => {
         const isSourceFile = await fileSystem.isFile(path.join(directory, 'source.js'));
         const isDirectory = await fileSystem.isFile(path.join(directory, 'directory'));

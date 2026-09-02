@@ -54,7 +54,7 @@ statements.
 
 **Severity:** High
 
-**Status:** Open
+**Status:** Completed
 
 **Trigger**
 

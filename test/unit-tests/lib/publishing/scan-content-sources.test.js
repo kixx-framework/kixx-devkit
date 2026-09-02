@@ -190,6 +190,75 @@ describe('publishing/scan-content-sources', ({ after, it }) => {
         assert(result.resources.some(({ type }) => type === 'PageMetadata'));
     });
 
+    it('rejects referenced symlinks which point outside the project', async () => {
+        const outsideDirectory = await makeProject(directories, {
+            'outside.html': 'Outside project',
+        });
+        const directory = await makeProject(directories, {
+            'pages/page.json': JSON.stringify({ template: 'linked.html' }),
+        });
+        await fsp.symlink(
+            path.join(outsideDirectory, 'outside.html'),
+            path.join(directory, 'pages', 'linked.html'),
+        );
+
+        const result = await scanContentSources(directory);
+        const problem = result.problems.find(({ code }) => {
+            return code === 'symlink-referenced-file';
+        });
+
+        assert(problem, 'expected a symlink validation problem');
+        assertEqual('pages/page.json', problem.filepath);
+        assertEqual('pages/linked.html', problem.referencedFile);
+        assertEqual('pages/linked.html', problem.symlink);
+        assertEqual(false, result.resources.some(({ type }) => type === 'PageTemplate'));
+    });
+
+    it('rejects referenced symlinks which point inside the project', async () => {
+        const directory = await makeProject(directories, {
+            'emails/welcome/email.json': JSON.stringify({
+                textTemplate: { id: 'text', filename: 'linked.txt' },
+            }),
+            'emails/welcome/message.txt': 'Inside project',
+        });
+        await fsp.symlink(
+            path.join(directory, 'emails', 'welcome', 'message.txt'),
+            path.join(directory, 'emails', 'welcome', 'linked.txt'),
+        );
+
+        const result = await scanContentSources(directory);
+        const problem = result.problems.find(({ code }) => {
+            return code === 'symlink-referenced-file';
+        });
+
+        assert(problem, 'expected a symlink validation problem');
+        assertEqual('emails/welcome/linked.txt', problem.referencedFile);
+        assertEqual('emails/welcome/linked.txt', problem.symlink);
+        const email = findResource(result, 'EmailAssets', '/welcome');
+        assertEqual(undefined, email.payload.textTemplate);
+    });
+
+    it('rejects symlinked directories in a referenced path', async () => {
+        const directory = await makeProject(directories, {
+            'pages/page.json': JSON.stringify({ template: 'linked/page.html' }),
+            'pages/templates/page.html': 'Inside project',
+        });
+        await fsp.symlink(
+            path.join(directory, 'pages', 'templates'),
+            path.join(directory, 'pages', 'linked'),
+        );
+
+        const result = await scanContentSources(directory);
+        const problem = result.problems.find(({ code }) => {
+            return code === 'symlink-referenced-file';
+        });
+
+        assert(problem, 'expected a symlink validation problem');
+        assertEqual('pages/linked/page.html', problem.referencedFile);
+        assertEqual('pages/linked', problem.symlink);
+        assertEqual(false, result.resources.some(({ type }) => type === 'PageTemplate'));
+    });
+
     it('publishes empty page and existing template bundles deterministically', async () => {
         const directory = await makeProject(directories, {
             'pages/page.json': '{}',

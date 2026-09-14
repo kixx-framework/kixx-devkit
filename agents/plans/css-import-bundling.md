@@ -196,7 +196,7 @@ Tasks
 
 ### Task A: Parse and render a single stylesheet
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** This plan, "Agreed decisions" and "Cross-cutting invariants"; `agents/docs/code-style-guide.md`; `agents/docs/code-documentation-guide.md`; `test/README.md`
 
@@ -267,19 +267,19 @@ Treat this list as orientation, not permission to ignore other necessary files. 
 
 **Acceptance criteria**
 
-- [ ] All four import forms are recognized, case-insensitively, with the
+- [x] All four import forms are recognized, case-insensitively, with the
   correct specifier and position.
-- [ ] Import-like text in strings, comments, and `url()` is ignored.
-- [ ] Conditioned (`screen`, `supports(…)`, `layer`, `layer(…)`) and external
+- [x] Import-like text in strings, comments, and `url()` is ignored.
+- [x] Conditioned (`screen`, `supports(…)`, `layer`, `layer(…)`) and external
   imports are classified correctly.
-- [ ] Each file-local problem code is produced with a correct position.
-- [ ] Relative URLs are rewritten, keeping query and fragment. Root-relative,
+- [x] Each file-local problem code is produced with a correct position.
+- [x] Relative URLs are rewritten, keeping query and fragment. Root-relative,
   external, `data:`, fragment, and empty URLs are untouched.
-- [ ] A relative `image-set()` string is `css-url-invalid`, and a
+- [x] A relative `image-set()` string is `css-url-invalid`, and a
   root-relative one is not.
-- [ ] Output equals `stripCssComments` for sources without imports, charset,
+- [x] Output equals `stripCssComments` for sources without imports, charset,
   or relative URLs, including the existing `strip-asset-comments` test inputs.
-- [ ] JSDoc on exported functions; lint clean.
+- [x] JSDoc on exported functions; lint clean.
 
 **Validation**
 
@@ -288,12 +288,22 @@ Treat this list as orientation, not permission to ignore other necessary files. 
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the standalone stylesheet parser and renderer, covering
+  import forms and placement, charset validation, URL classification and
+  rewriting, image-set validation, comment stripping, source positions, and
+  byte stability. Added focused unit coverage for each behavior.
+- Current state: Complete.
+- Remaining: None for Task A. Task B will consume this module for graph
+  resolution and bundling.
+- Decisions and discoveries: The public API keeps cross-file resolution out of
+  the parser and exposes original-source ranges so Task B can replace imports
+  without reparsing. URL tokens containing comment-like bytes remain unchanged
+  to preserve the existing comment stripper's byte behavior.
+- Actual files changed: `lib/publishing/parse-stylesheet.js`;
+  `test/unit-tests/lib/publishing/parse-stylesheet.test.js`;
+  `agents/plans/css-import-bundling.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/parse-stylesheet.test.js`
+  (12 passed); `npm test` (459 passed); `git diff --check` (passed).
 - Blockers: None.
 
 

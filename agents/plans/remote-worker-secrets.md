@@ -104,7 +104,7 @@ multiple non-atomic calls or selecting an untagged `latest` version.
 
 ### Task RS-1: Secret declaration contract and dotenv parsing
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, `test/README.md`, `docs/cloudflare.md`
 
@@ -149,11 +149,11 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] Declaration parsing returns names only, sorted, without exposing example values.
-- [ ] Actual dotenv parsing preserves current supported syntax and empty values.
-- [ ] Missing, malformed, invalid, and duplicate declarations produce focused `UsageError`s.
-- [ ] Parsing does not require `.env.<environment>` and `.env.<environment>.secrets` as a pair.
-- [ ] Tests prove example values cannot escape through the declaration result or errors.
+- [x] Declaration parsing returns names only, sorted, without exposing example values.
+- [x] Actual dotenv parsing preserves current supported syntax and empty values.
+- [x] Missing, malformed, invalid, and duplicate declarations produce focused `UsageError`s.
+- [x] Parsing does not require `.env.<environment>` and `.env.<environment>.secrets` as a pair.
+- [x] Tests prove example values cannot escape through the declaration result or errors.
 
 **Validation**
 
@@ -162,19 +162,19 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added independent dotenv value reading and sorted declaration-name reading from `example.env.secrets`, with focused missing-file handling and value-redaction coverage.
+- Current state: Complete.
+- Remaining: None.
+- Decisions and discoveries: Retained `readEnvFiles()` temporarily for existing `create-worker-version` callers; RS-5 can migrate that call site without coupling it to this parser task. Both new APIs reuse the existing minimal grammar.
+- Actual files changed: `lib/env-file.js`, `test/unit-tests/lib/env-file.test.js`, `agents/plans/remote-worker-secrets.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/env-file.test.js` passed 21 tests; `npm run lint` passed; `git diff --check` passed.
 - Blockers: None.
 
 ---
 
 ### Task RS-2: Atomic undeployed secret-version API
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, Cloudflare Workers bulk secrets and versions API documentation
 
@@ -219,12 +219,12 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] One request creates one undeployed version for one or many secret operations.
-- [ ] Omitted names remain unchanged and `null` explicitly deletes a name.
-- [ ] The returned version ID is causally tied to this request.
-- [ ] No deployment endpoint is called.
-- [ ] Secret values do not appear in thrown errors or returned metadata.
-- [ ] Unsupported or ambiguous Cloudflare protocol behavior blocks the task rather than weakening atomicity.
+- [x] One request creates one undeployed version for one or many secret operations.
+- [x] Omitted names remain unchanged and `null` explicitly deletes a name.
+- [x] The returned version ID is causally tied to this request.
+- [x] No deployment endpoint is called.
+- [x] Secret values do not appear in thrown errors or returned metadata.
+- [x] Unsupported or ambiguous Cloudflare protocol behavior blocks the task rather than weakening atomicity.
 
 **Validation**
 
@@ -236,22 +236,19 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: The current Cloudflare documentation says bulk
-  secret updates are additive, limited to 100 operations, and create one
-  version. The implementation must still verify version-only behavior and how
-  the new version ID is returned before committing to the endpoint.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added one atomic bulk-secret PATCH with create/update/delete translation, operation limits, version annotations, UUID correlation, exact-match version lookup, identity-only results, and sensitive error redaction.
+- Current state: Complete.
+- Remaining: Live disposable-Worker validation remains an explicit exception because no disposable Worker or Cloudflare authorization context was provided.
+- Decisions and discoveries: The official bulk endpoint creates one version without a deployment, leaves omitted names unchanged, accepts at most 100 operations, and accepts `version_tags`. Its response contains secret metadata rather than a version ID, so the client authors a collision-resistant `workers/tag`, scans version annotations, and requires exactly one match rather than selecting `latest`.
+- Actual files changed: `lib/cloudflare/cloudflare-api-client.js`, `test/unit-tests/lib/cloudflare/cloudflare-api-client.test.js`, `agents/plans/remote-worker-secrets.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/cloudflare/cloudflare-api-client.test.js` passed 47 tests; `npm run lint` passed; `git diff --check` passed. Manual sandbox check not run because the plan provides no disposable Worker target or authorization context.
 - Blockers: None.
 
 ---
 
 ### Task RS-3: Secret mutation workflow and state invariants
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RS-1, RS-2
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, `test/README.md`, `docs/cloudflare.md`
 
@@ -303,12 +300,12 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] Set and bulk-set are additive; unmentioned names remain in state and remotely.
-- [ ] Delete requires prior removal from `example.env.secrets` and removes only the named secret.
-- [ ] Undeclared, reserved, stale-base, missing-state, wrong-Worker, and unknown-delete cases fail before mutation.
-- [ ] One workflow invocation performs at most one remote mutation and one state write.
-- [ ] Remote failure leaves state unchanged; state failure reports that the remote version exists and gives its ID for recovery.
-- [ ] State records names and exact inheritance provenance but no secret values.
+- [x] Set and bulk-set are additive; unmentioned names remain in state and remotely.
+- [x] Delete requires prior removal from `example.env.secrets` and removes only the named secret.
+- [x] Undeclared, reserved, stale-base, missing-state, wrong-Worker, and unknown-delete cases fail before mutation.
+- [x] One workflow invocation performs at most one remote mutation and one state write.
+- [x] Remote failure leaves state unchanged; state failure reports that the remote version exists and gives its ID for recovery.
+- [x] State records names and exact inheritance provenance but no secret values.
 
 **Validation**
 
@@ -319,19 +316,19 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added shared additive set and guarded delete workflows, exact-base and latest-version preflight, one remote mutation followed by one state replacement, name-only state, inheritance-aware hashing, and recovery errors for post-mutation state failures. Extended state validation for sorted unique secret names.
+- Current state: Complete.
+- Remaining: None.
+- Decisions and discoveries: A legacy state without `secretNames` is treated as having no recorded secrets so an existing Worker can be bootstrapped through set operations. The next bindings hash removes prior secret bindings by both type and recorded name, then hashes non-secret bindings and exact-version `inherit` definitions; this handles bases created by either secret mutation or normal inherited builds. Stale detection compares the recorded exact version with Cloudflare's most recent version before mutation; Cloudflare documents no compare-and-swap option for the bulk endpoint.
+- Actual files changed: `lib/cloudflare/manage-worker-secrets.js`, `lib/cloudflare/worker-version-state.js`, `test/unit-tests/lib/cloudflare/manage-worker-secrets.test.js`, `test/unit-tests/lib/cloudflare/worker-version-state.test.js`, `agents/plans/remote-worker-secrets.md`.
+- Validation run: Focused RS-3 command passed 26 tests; `npm test` passed lint and all 496 tests; `git diff --check` passed.
 - Blockers: None.
 
 ---
 
 ### Task RS-4: Secret-management CLI commands
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RS-3
 **Documentation:** `commands/README.md`, `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, `test/README.md`
 
@@ -385,13 +382,13 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] Help lists all three commands with the agreed interfaces.
-- [ ] Interactive single-secret input is masked; CI input works through stdin.
-- [ ] Bulk input defaults correctly and an explicit pathname overrides it.
-- [ ] Bulk input is applied in one workflow call and remains additive.
-- [ ] Each successful command reports one undeployed version and updates state.
-- [ ] No command output or error contains a supplied secret value.
-- [ ] Tests prove no deployment or Publishing API call occurs.
+- [x] Help lists all three commands with the agreed interfaces.
+- [x] Interactive single-secret input is masked; CI input works through stdin.
+- [x] Bulk input defaults correctly and an explicit pathname overrides it.
+- [x] Bulk input is applied in one workflow call and remains additive.
+- [x] Each successful command reports one undeployed version and updates state.
+- [x] No command output or error contains a supplied secret value.
+- [x] Tests prove no deployment or Publishing API call occurs.
 
 **Validation**
 
@@ -404,19 +401,19 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Registered and implemented `set-secret`, `delete-secret`, and additive `set-secrets`; added masked TTY and EOF-based stdin secret input; added default/explicit dotenv resolution, concise value-free output, and command/input tests.
+- Current state: Complete.
+- Remaining: None.
+- Decisions and discoveries: Added focused `readSecretValue()` rather than changing environment-variable/password prompt behavior. It preserves terminal whitespace, consumes piped input through EOF, removes only one final LF or CRLF, treats a piped newline as an explicit empty value, and rejects a stream with no bytes. Commands inject only the Cloudflare client and never construct Publishing API clients.
+- Actual files changed: `commands/cloudflare/index.js`, `commands/cloudflare/set-secret.js`, `commands/cloudflare/delete-secret.js`, `commands/cloudflare/set-secrets.js`, `lib/prompt.js`, `test/unit-tests/commands/cloudflare/set-secret.test.js`, `test/unit-tests/commands/cloudflare/delete-secret.test.js`, `test/unit-tests/commands/cloudflare/set-secrets.test.js`, `test/unit-tests/lib/prompt.test.js`, `agents/plans/remote-worker-secrets.md`.
+- Validation run: All four requested help commands rendered the agreed interfaces; command/prompt validation passed 43 tests; `npm run lint` passed; `git diff --check` passed.
 - Blockers: None.
 
 ---
 
 ### Task RS-5: Strict remote-secret inheritance in builds and releases
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RS-1, RS-3
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, `test/README.md`, `docs/cloudflare.md`
 
@@ -473,12 +470,12 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] Normal builds and releases never open `.env.<environment>.secrets`.
-- [ ] Every declared secret is inherited from the exact recorded version under strict mode.
-- [ ] Missing state, wrong Worker, absent source version, or missing declared name fails before upload.
-- [ ] Local secret-file value differences cannot change hashes or Worker versions.
-- [ ] Declaration or inheritance-source changes participate deterministically in `bindingsHash`.
-- [ ] Existing code/config idempotency, resource provisioning, Durable Object behavior, and release ordering remain intact.
+- [x] Normal builds and releases never open `.env.<environment>.secrets`.
+- [x] Every declared secret is inherited from the exact recorded version under strict mode.
+- [x] Missing state, wrong Worker, absent source version, or missing declared name fails before upload.
+- [x] Local secret-file value differences cannot change hashes or Worker versions.
+- [x] Declaration or inheritance-source changes participate deterministically in `bindingsHash`.
+- [x] Existing code/config idempotency, resource provisioning, Durable Object behavior, and release ordering remain intact.
 
 **Validation**
 
@@ -490,19 +487,19 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Normal version preparation now reads plain dotenv values and declared secret names only, verifies an exact current remote source version, emits exact `inherit` bindings, uploads with Cloudflare strict inheritance, and records deterministic name/provenance state without secret values. Added failure, payload, hashing, idempotency, and no-local-secret-read coverage.
+- Current state: Complete.
+- Remaining: Live disposable-Worker validation remains an explicit exception because no disposable Worker or Cloudflare authorization context was provided.
+- Decisions and discoveries: Cloudflare/Wrangler sends strict inheritance as `bindings_inherit=strict`. `CloudflareWorkerVersion` rejects the implicit `latest` value. A created version's state hash normalizes inherited bindings to that newly created version ID; retaining the prior source ID would make every subsequent unchanged build upload again. The post-upload hash reuses pre-serialization export definitions because payload serialization supplies default Durable Object lifecycle fields that are not authored configuration. To make new-environment bootstrap possible without guessing a source, missing state is accepted only when `example.env.secrets` has no active declarations; that run creates the secret-free base. Missing state with any declared name still fails before bundling.
+- Actual files changed: `lib/cloudflare/cloudflare-api-client.js`, `lib/cloudflare/cloudflare-worker-version.js`, `lib/cloudflare/create-worker-version.js`, `lib/cloudflare/worker-bindings.js`, `test/unit-tests/lib/cloudflare/cloudflare-api-client.test.js`, `test/unit-tests/lib/cloudflare/cloudflare-worker-version.test.js`, `test/unit-tests/lib/cloudflare/create-worker-version.test.js`, `test/unit-tests/lib/cloudflare/worker-bindings.test.js`, `agents/plans/remote-worker-secrets.md`.
+- Validation run: Focused RS-5 command passed 94 tests; `npm test` passed lint and all 511 tests; `git diff --check` passed. Manual disposable-Worker check not run because the plan provides no disposable Worker target or authorization context.
 - Blockers: None.
 
 ---
 
 ### Task RS-6: User documentation and sample migration
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RS-4, RS-5
 **Documentation:** `README.md`, `docs/cloudflare.md`, `docs/configuration.md`, `commands/README.md`
 
@@ -549,10 +546,10 @@ Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] Documentation contains no claim that normal builds upload local secret values.
-- [ ] All commands, defaults, additive semantics, undeployed behavior, and guards are documented.
-- [ ] Bootstrap, rotation, deletion, stale-state recovery, local development, and CI each have an actionable procedure.
-- [ ] The sample uses `example.env.secrets` as the declared-name contract and explains transient secrets.
+- [x] Documentation contains no claim that normal builds upload local secret values.
+- [x] All commands, defaults, additive semantics, undeployed behavior, and guards are documented.
+- [x] Bootstrap, rotation, deletion, stale-state recovery, local development, and CI each have an actionable procedure.
+- [x] The sample uses `example.env.secrets` as the declared-name contract and explains transient secrets.
 
 **Validation**
 
@@ -562,10 +559,10 @@ Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Documented the three secret commands, additive and undeployed semantics, masked/CI input, declaration rules, strict exact inheritance, bootstrap, rotation/deletion order, local-development separation, and stale-state recovery. Updated the command inventory and sample transient-token guidance.
+- Current state: Complete.
+- Remaining: None. A live disposable-Worker check remains the explicit RS-2/RS-5 exception documented above.
+- Decisions and discoveries: The safe fresh-environment bootstrap is a secret-free base upload while all declarations remain commented, followed by declaration, one atomic set, and a normal inherited build. The sample application's `# @optional` marker affects its Node.js manifest parser only; every active assignment remains a required Cloudflare declaration.
+- Actual files changed: `README.md`, `docs/cloudflare.md`, `docs/configuration.md`, `tmp/sample-app/docs/configuration.md`, `tmp/sample-app/src/example.env.secrets`, `lib/cloudflare/create-worker-version.js`, `test/unit-tests/lib/cloudflare/create-worker-version.test.js`, `agents/plans/remote-worker-secrets.md`.
+- Validation run: Reviewed all requested references with the plan's `rg` command; `set-secret`, `set-secrets`, and `delete-secret` help output matched the documentation; focused RS-5 command passed 94 tests; `npm test` passed lint and all 511 tests; `git diff --check` passed.
 - Blockers: None.

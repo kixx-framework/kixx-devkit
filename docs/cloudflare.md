@@ -52,12 +52,13 @@ The project directory supplies:
 cloudflare-config.js
 cloudflare-server.js
 .env.<environment>
-.env.<environment>.secrets
-.kixx/cloudflare-state.<environment>.json   # created after an upload
+example.env.secrets
+.kixx/cloudflare-state.<environment>.json
 ```
 
-Both dotenv files are required. An empty file is valid, but an absent file is
-treated as a likely environment-name mistake and stops the command.
+The plain environment file and secret declaration file are required. State is
+required once any secret is actively declared; the bootstrap exception is
+documented below. Normal builds never open `.env.<environment>.secrets`.
 
 #### `cloudflare-config.js`
 
@@ -106,20 +107,24 @@ buckets.
 
 #### Environment files
 
-Every value in `.env.<environment>` becomes a `plain_text` binding. Every value
-in `.env.<environment>.secrets` becomes a `secret_text` binding.
+Every value in `.env.<environment>` becomes a `plain_text` binding. Active
+assignments in `example.env.secrets` declare required secret names; their
+example values are ignored. Each name becomes an `inherit` binding referencing
+the exact `versionId` in the state file. Cloudflare strict inheritance makes a
+missing source binding fail instead of being silently omitted.
 
 Names must use shell-style identifier syntax: a letter or underscore followed
 by letters, digits, or underscores. Duplicate names in one file or across
-binding sources are rejected.
+binding sources are rejected. `example.env.secrets` is shared by all
+Cloudflare environments; comments do not declare names.
 
 Two names are command-owned:
 
 - `ENVIRONMENT` always comes from `--environment`. An `ENVIRONMENT` value in
   the plain file is ignored so a copied dotenv file cannot select the wrong
   configuration inside the Worker.
-- `BUILD_ID` is generated for each uploaded version. Declaring it in either
-  dotenv file is an error.
+- `BUILD_ID` is generated for each uploaded version. Declaring it in the plain
+  file, or using it as a secret name, is an error.
 
 The dotenv parser is intentionally small. It supports `NAME=value`, blank
 lines, whole-line comments, and matching single or double quotes around a
@@ -137,7 +142,7 @@ secrets, and requires `--environment`. Environment-specific Cloudflare paths
 are validated inside the version pipeline because the CLI runner cannot know
 the selected environment before parsing the option.
 
-#### 2. Inspect the Worker
+#### 2. Inspect the Worker and source version
 
 The command fetches `WORKER.name` from Cloudflare. A missing Worker produces a
 usage error naming the `create-worker` command to run.
@@ -148,6 +153,12 @@ The Worker record also tells the command:
 - which Durable Object class namespaces appear to be provisioned.
 
 Those facts determine whether standalone creation is safe.
+
+When state exists, the command verifies that it names the configured Worker,
+its exact source version still exists and is Cloudflare's latest version, and
+every declared secret appears in `state.secretNames`. Any mismatch stops before
+bundling or upload. This optimistic-concurrency guard prevents one checkout
+from building on top of remote changes made by another.
 
 #### 3. Resolve D1 and KV resources
 
@@ -167,8 +178,9 @@ interrupted or the reported IDs have not yet been recorded.
 
 #### 4. Build bindings and Durable Object exports
 
-The command combines resource configuration, the selected environment, and the
-two dotenv files into a deterministically name-sorted binding array.
+The command combines resource configuration, the selected environment, the
+plain dotenv file, and exact inherited secret definitions into a
+deterministically name-sorted binding array.
 
 It also creates a declarative Cloudflare `exports` map for Durable Objects.
 Classes currently configured by `CONTENT_STORE` are live SQLite-backed exports.
@@ -222,30 +234,24 @@ The command calculates three SHA-256 hashes:
 | Hash | Inputs |
 | --- | --- |
 | `modulesHash` | Module names and comment-stripped contents, independent of module order. |
-| `bindingsHash` | Bindings and the Durable Object exports map. |
+| `bindingsHash` | Bindings, exact secret inheritance provenance, and the Durable Object exports map. |
 | `configHash` | The `WORKER_VERSION` object. |
 
-It compares them with `.kixx/cloudflare-state.<environment>.json`. A missing
-state file or a changed hash requires an upload. `--force` also requires one,
-and so do these:
+It compares them with `.kixx/cloudflare-state.<environment>.json`. A changed
+hash requires an upload. `--force` also requires one, as does a bound Durable
+Object class whose namespace is still missing.
 
-- A bound Durable Object class whose namespace is still missing. This
-  overrides an unchanged hash result so it cannot remain unprovisioned
-  indefinitely.
-- `environments.<environment>.WORKER.name` naming a different Worker than the
-  one recorded in the state file. The state file is scoped by environment, not
-  by Worker, so a retarget would otherwise leave the new Worker never
-  receiving a version while the command reports success. The previous name is
-  reported as `retargetedFrom` and printed as its own line in the command
-  output.
+Missing state with active secret declarations, or a different configured
+Worker, is an error because there is no safe secret source to infer. Restore
+verified state rather than retargeting it.
 
 `BUILD_ID` is absent from every hash. It is generated after the upload
 decision, so the clock alone does not make an unchanged build appear
 different.
 
-The idempotency decision is local. The command does not compare the candidate
-payload with versions currently stored by Cloudflare. Keep the state file with
-the project when the same environment is built from multiple machines.
+The hashes are local, while source freshness is checked remotely. Keep the
+state file with the project when the same environment is built from multiple
+machines.
 
 #### 7. Create the version
 
@@ -257,7 +263,7 @@ For a required upload, the command:
 4. Adds `workers/triggered_by` naming this command.
 5. Adds every packaged module, binding, and Durable Object export to the
    version payload.
-6. Calls Cloudflare's Worker Versions API.
+6. Calls Cloudflare's Worker Versions API with strict binding inheritance.
 
 The new version exists in Cloudflare but receives no traffic.
 
@@ -275,7 +281,8 @@ replace the environment's state file. The record contains:
     "deployed": false,
     "modulesHash": "...",
     "bindingsHash": "...",
-    "configHash": "..."
+    "configHash": "...",
+    "secretNames": ["API_KEY", "SIGNING_SECRET"]
 }
 ```
 
@@ -286,9 +293,7 @@ record of the successful upload.
 Command output identifies the environment and Worker, reports which hash
 groups changed, prints the build and version IDs, states that it remains
 undeployed, shows Durable Object reconciliation when Cloudflare returns it,
-and names the state file written. When the upload was triggered by a Worker
-retarget, an unmissable `RETARGETED from Worker "..."` line precedes the hash
-lines so an upload with three `unchanged` hashes does not read as a defect.
+and names the state file written.
 
 ### Durable Object deployment policy
 
@@ -314,13 +319,96 @@ is removed.
   and KV resources, and `ContentAddressableIndexStore` bindings.
 - `plugins/cloudflare.js` exports `ContentAddressableIndexStore`, matching
   `CONTENT_STORE.durableObjectClassName`.
-- `example.env` and `example.env.secrets` document plain and secret values.
-  Copy them to `.env.production` and `.env.production.secrets`, then replace
-  their example values before a production build.
+- `example.env` documents plain values. `example.env.secrets` declares remote
+  secret names and also remains a copy-from template for local Node.js use.
+  Local secret values are never deployment inputs.
 
 At the time this document was written, packaging the sample entry succeeded
 and found 201 reachable modules. That count is descriptive rather than an
 invariant; it changes as the sample application changes.
+
+## Worker secrets
+
+Secret values are remote Worker-version state. These commands create an
+undeployed version, update `.kixx/cloudflare-state.<environment>.json` after
+Cloudflare succeeds, and never change traffic. Promote the result separately
+with `deploy-version` or create a later normal version that inherits it.
+
+Every set name must be an active assignment in `example.env.secrets`.
+`BUILD_ID` and `ENVIRONMENT` are reserved. The commands verify that the state
+file names the configured Worker and exact latest remote version before making
+one atomic mutation. Omitted names are unchanged.
+
+### `set-secret`
+
+```sh
+kixx.js cloudflare set-secret -e production API_KEY
+```
+
+An interactive terminal prompts with input masking. For CI, provide the value
+on standard input, never as an argument:
+
+```sh
+printenv API_KEY | kixx.js cloudflare set-secret -e production API_KEY
+```
+
+Non-terminal input is read through EOF. One final LF or CRLF is removed; all
+other whitespace is part of the value.
+
+### `set-secrets`
+
+```sh
+kixx.js cloudflare set-secrets -e production [dotenv-file]
+```
+
+The optional path defaults to `.env.production.secrets` for the selected
+environment. Every parsed assignment is created or replaced in one request
+and one version. The operation is additive: names omitted from the file remain
+unchanged. Empty input and more than 100 operations are rejected.
+
+### `delete-secret`
+
+Deletion requires reviewed declaration removal:
+
+1. Stop code from requiring the secret and deploy that change if necessary.
+2. Remove or comment out its assignment in `example.env.secrets` and commit it.
+3. Run `kixx.js cloudflare delete-secret -e production OLD_SECRET`.
+4. Promote the returned version, or build a later version from it.
+
+The command refuses to delete a name that is still actively declared or that
+the recorded source version does not list.
+
+### Bootstrap and recovery
+
+The workflow requires an existing version state before it can inherit a
+declared secret. Bootstrap a new environment in this order:
+
+1. Create the Worker and leave every assignment in `example.env.secrets`
+   commented out.
+2. Run `create-worker-version`; with no state and no active declarations, it
+   creates the one permitted secret-free base and records its exact ID.
+3. Add the required declarations and commit them.
+4. Run `set-secret` or one additive `set-secrets` call covering every declared
+   name.
+5. Run `create-worker-version` or `release` so the normal artifact inherits
+   those values from the exact secret-bearing version.
+
+For a project migrating to this workflow, retain the state from its last
+successful version upload and begin at step 3. Never fabricate a version ID or
+select `latest`.
+
+If local state is missing, recover the complete
+`.kixx/cloudflare-state.<environment>.json` from the CI artifact or operator
+checkout that created Cloudflare's latest version. Confirm its `workerName`
+and `versionId` against Cloudflare before retrying. If Cloudflare reports a
+newer version, recover the state produced by that exact operation. There is no
+automatic adoption command because hashes, `BUILD_ID`, and known secret names
+cannot be reconstructed safely from an uncorrelated latest version.
+
+If Cloudflare creates a secret version but the local state write fails, the
+error prints that remote version ID. Preserve it and repair the state from the
+prior record plus the reported ID before another operation; otherwise the
+optimistic-concurrency check will correctly reject the stale file.
 
 ## `deploy-version`
 

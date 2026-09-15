@@ -102,3 +102,24 @@ any D1 database or KV namespace whose ID is not yet configured.
 Worker and version settings live in the project's `cloudflare-config.js`, keyed
 by environment name under `environments`. See [cloudflare.md](cloudflare.md)
 for its shape.
+
+## Cloudflare environment and secret files
+
+`.env.<environment>` supplies ordinary `plain_text` Worker bindings and remains
+a required normal-build input. `example.env.secrets` is the sole reviewed
+declaration of Worker secret names across every Cloudflare environment. Its
+assignment values are examples for local setup and are ignored by deployment
+code.
+
+`.env.<environment>.secrets` remains useful to the application during local
+Node.js development and is the default input to `cloudflare set-secrets` when
+explicitly rotating remote values. Normal `create-worker-version` and
+`release` commands never open it. They inherit each actively declared name
+from the exact Worker version recorded in
+`.kixx/cloudflare-state.<environment>.json`.
+
+Use `cloudflare set-secret`, `set-secrets`, and `delete-secret` to change
+remote values. Each produces an undeployed version; changing traffic remains
+an explicit `deploy-version` or `release` step. See
+[cloudflare.md](cloudflare.md#worker-secrets) for bootstrap, CI, deletion, and
+stale-state recovery procedures.

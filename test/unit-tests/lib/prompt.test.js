@@ -4,7 +4,12 @@ import process from 'node:process';
 import { describe } from 'kixx-test';
 import { assert, assertEqual } from 'kixx-assert';
 
-import { promptForValue, promptForValueTwice, promptForConfirmation } from '../../../lib/prompt.js';
+import {
+    promptForConfirmation,
+    promptForValue,
+    promptForValueTwice,
+    readSecretValue,
+} from '../../../lib/prompt.js';
 
 const ENV_VAR = 'KIXX_TEST_PROMPT_VALUE';
 
@@ -197,6 +202,43 @@ describe('prompt', ({ it }) => {
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
+    });
+
+    it('reads a masked terminal secret without trimming or echoing it', async () => {
+        const input = makeTerminal({ isTTY: true });
+        const promise = readSecretValue({ label: 'Secret value', input, output: input.output });
+
+        input.write('  exact secret  \n');
+        const value = await promise;
+
+        assertEqual('  exact secret  ', value);
+        assert(!input.written().includes('exact secret'), 'expected masked output');
+    });
+
+    it('reads piped secret input through EOF and removes only one trailing line ending', async () => {
+        const input = makeTerminal({ isTTY: false });
+        const promise = readSecretValue({ label: 'Secret value', input, output: input.output });
+
+        input.end('first\nsecond\r\n');
+        const value = await promise;
+
+        assertEqual('first\nsecond', value);
+        assertEqual('', input.written());
+    });
+
+    it('allows an explicitly piped empty line but rejects absent piped input', async () => {
+        const emptyLine = makeTerminal({ isTTY: false });
+        const emptyLinePromise = readSecretValue({ label: 'Secret value', input: emptyLine });
+        emptyLine.end('\n');
+        assertEqual('', await emptyLinePromise);
+
+        const absent = makeTerminal({ isTTY: false });
+        const absentPromise = readSecretValue({ label: 'Secret value', input: absent });
+        absent.end();
+        const caught = await catchAsyncError(() => absentPromise);
+
+        assertEqual('UsageError', caught.name);
+        assert(!caught.message.includes('undefined'), 'expected a focused error');
     });
 });
 

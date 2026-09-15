@@ -1,12 +1,84 @@
 import { describe } from 'kixx-test';
 import { assert, assertEqual } from 'kixx-assert';
-import { readEnvFiles } from '../../../lib/env-file.js';
+import {
+    readDeclaredSecretNames,
+    readEnvFiles,
+    readEnvValues,
+} from '../../../lib/env-file.js';
 
 const ENVARS_FILEPATH = '/app/.env.production';
 const SECRETS_FILEPATH = '/app/.env.production.secrets';
+const DECLARATIONS_FILEPATH = '/app/example.env.secrets';
 
 
 describe('env-file', ({ it }) => {
+    it('reads one dotenv value file without requiring an environment pair', async () => {
+        const values = await readEnvValues({
+            filepath: SECRETS_FILEPATH,
+            fileSystem: makeFileSystem({
+                [SECRETS_FILEPATH]: [ 'TOKEN="actual value"', 'EMPTY=' ].join('\n'),
+            }),
+        });
+
+        assertEqual('actual value', values.TOKEN);
+        assertEqual('', values.EMPTY);
+    });
+
+    it('returns sorted declared secret names without returning example values', async () => {
+        const exampleValue = 'EXAMPLE_VALUE_MUST_NOT_ESCAPE';
+        const names = await readDeclarations([
+            '# COMMENTED_OUT=ignored',
+            `ZETA=${ exampleValue }`,
+            'EMPTY=',
+            'ALPHA="another example"',
+        ].join('\n'));
+
+        assertEqual('ALPHA,EMPTY,ZETA', names.join(','));
+        assert(!JSON.stringify(names).includes(exampleValue), 'expected example value to be absent');
+        assert(!names.includes('COMMENTED_OUT'), 'expected comments not to declare names');
+    });
+
+    it('throws a focused UsageError when the declaration file is missing', async () => {
+        const caught = await catchAsyncError(() => {
+            return readDeclaredSecretNames({
+                projectDirectory: '/app',
+                fileSystem: makeFileSystem({}),
+            });
+        });
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes(DECLARATIONS_FILEPATH), 'expected the declaration path');
+        assert(caught.message.includes('declares the Worker secret names'), 'expected the file role');
+    });
+
+    it('rejects malformed declarations without exposing their example values', async () => {
+        const exampleValue = 'EXAMPLE_VALUE_MUST_NOT_ESCAPE';
+        const caught = await catchAsyncError(() => {
+            return readDeclarations(`malformed ${ exampleValue }`);
+        });
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('line 1'), 'expected the line number');
+        assert(!caught.message.includes(exampleValue), 'expected example value to be absent');
+    });
+
+    it('rejects invalid and duplicate declarations with focused locations', async () => {
+        const invalid = await catchAsyncError(() => readDeclarations('1TOKEN=example'));
+        const duplicate = await catchAsyncError(() => {
+            return readDeclarations([ 'TOKEN=first', 'TOKEN=second' ].join('\n'));
+        });
+
+        assertEqual('UsageError', invalid.name);
+        assert(invalid.message.includes('1TOKEN'), 'expected the invalid name');
+        assert(invalid.message.includes('line 1'), 'expected the invalid-name line');
+        assertEqual('UsageError', duplicate.name);
+        assert(duplicate.message.includes('lines 1 and 2'), 'expected both duplicate lines');
+        assert(!duplicate.message.includes('first'), 'expected first example value to be absent');
+        assert(!duplicate.message.includes('second'), 'expected second example value to be absent');
+    });
+
     it('returns both files as separate plain objects of name to string', async () => {
         const { envars, secrets } = await readBoth({
             [ENVARS_FILEPATH]: [ 'ENVIRONMENT=production', 'PORT=3000' ].join('\n'),
@@ -240,4 +312,11 @@ async function catchAsyncError(fn) {
         return error;
     }
     return null;
+}
+
+function readDeclarations(text) {
+    return readDeclaredSecretNames({
+        projectDirectory: '/app',
+        fileSystem: makeFileSystem({ [DECLARATIONS_FILEPATH]: text }),
+    });
 }

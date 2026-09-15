@@ -4,7 +4,6 @@ import {
     parseStylesheet,
     renderStylesheet,
 } from '../../../../lib/publishing/parse-stylesheet.js';
-import { stripCssComments } from '../../../../lib/publishing/strip-asset-comments.js';
 
 
 describe('publishing/parse-stylesheet', ({ it }) => {
@@ -167,25 +166,36 @@ describe('publishing/parse-stylesheet', ({ it }) => {
     });
 
     it('matches existing CSS comment stripping for stable sources', () => {
-        const sources = [
-            '/* first */a { color: red; /* second */ display: block; }',
-            [
+        const fixtures = [
+            {
+                source: '/* first */a { color: red; /* second */ display: block; }',
+                expected: 'a { color: red;  display: block; }',
+            },
+            {
+                source: [
                 'a::before { content: "/* text */"; }',
                 'a { background: url(images/*literal*/icon.svg); }',
                 "b { background: URL('data:image/svg+xml;/*literal*/'); }",
                 '/* removed */',
-            ].join('\n'),
+                ].join('\n'),
+                expected: [
+                    'a::before { content: "/* text */"; }',
+                    'a { background: url(images/*literal*/icon.svg); }',
+                    "b { background: URL('data:image/svg+xml;/*literal*/'); }",
+                    '',
+                ].join('\n'),
+            },
         ];
 
-        for (const source of sources) {
+        for (const fixture of fixtures) {
             const rendered = renderStylesheet({
-                source,
-                parsed: parseStylesheet(source),
+                source: fixture.source,
+                parsed: parseStylesheet(fixture.source),
                 pathname: '/main.css',
                 replaceImport: () => '',
             });
 
-            assertEqual(stripCssComments(source), rendered);
+            assertEqual(fixture.expected, rendered);
         }
     });
 });

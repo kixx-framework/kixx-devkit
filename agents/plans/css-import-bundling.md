@@ -136,13 +136,14 @@ These were settled with the project owner. Do not re-open them.
 
 ### Cross-cutting invariants
 
-- **No new dependencies.** The CSS scanner is hand-written, following the
-  precedent of `stripCssComments` in `lib/publishing/strip-asset-comments.js`.
+- **No new dependencies.** The CSS scanner is hand-written, replacing the
+  former `stripCssComments` implementation in `strip-asset-comments.js`.
   It understands only strings, comments, escapes, block nesting, top-level
   at-rule preludes, `url()`, and `image-set()`. It does not parse selectors or
   declarations.
 - **Byte stability.** For a CSS file with no `@import`, no `@charset`, and no
-  relative URL, the output is byte-identical to `stripCssComments(source)`.
+  relative URL, the output is byte-identical to the former comment-stripped
+  output.
   Unaffected assets keep their current hashes.
 - **Determinism.** The same tree produces the same bytes, `sourceFiles`, and
   problem order.
@@ -253,7 +254,7 @@ own.
   query plus fragment as a quoted `url("…")`, escaping `"` and `\`. Do not
   rewrite root-relative, external, or fragment URLs.
 - Byte stability: with no imports, no charset, and no relative URLs, the
-  output equals `stripCssComments(source)`.
+  output equals the pre-bundling comment-stripped output.
 - The render callback receives the parsed import and returns replacement
   text. Task B decides whether that text is inlined content or a rewritten
   kept statement.
@@ -277,8 +278,8 @@ Treat this list as orientation, not permission to ignore other necessary files. 
   external, `data:`, fragment, and empty URLs are untouched.
 - [x] A relative `image-set()` string is `css-url-invalid`, and a
   root-relative one is not.
-- [x] Output equals `stripCssComments` for sources without imports, charset,
-  or relative URLs, including the existing `strip-asset-comments` test inputs.
+- [x] Output matches the former CSS comment-stripper behavior for sources
+  without imports, charset, or relative URLs, including its test inputs.
 - [x] JSDoc on exported functions; lint clean.
 
 **Validation**
@@ -430,7 +431,7 @@ Treat this list as orientation, not permission to ignore other necessary files. 
 
 ### Task C: Integrate bundling into content scanning and document it
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** B
 **Documentation:** This plan, "Agreed decisions"; `docs/app.md`; `agents/docs/code-style-guide.md`; `test/README.md`
 
@@ -495,19 +496,19 @@ Treat this list as orientation, not permission to ignore other necessary files. 
 
 **Acceptance criteria**
 
-- [ ] Scanning a temp project with the sample app's stylesheet layout
+- [x] Scanning a temp project with the sample app's stylesheet layout
   produces:
   - bundled `stylesheets/stylesheet.css` and `stylesheets/admin.css` payloads
     with no local imports
   - hashes that change when any imported file changes
   - `sourceFiles` listing entry-first contributors
-- [ ] Library files are still published as their own `StaticAsset` resources.
-- [ ] A bad import in a library imported by several entries is reported once.
-- [ ] Any CSS problem makes `assertPublishableContentSources` throw before
+- [x] Library files are still published as their own `StaticAsset` resources.
+- [x] A bad import in a library imported by several entries is reported once.
+- [x] Any CSS problem makes `assertPublishableContentSources` throw before
   publishing.
-- [ ] CSS without imports, charset, or relative URLs hashes exactly as before
+- [x] CSS without imports, charset, or relative URLs hashes exactly as before
   (existing scanner tests stay green without changing their expectations).
-- [ ] `docs/app.md` documents:
+- [x] `docs/app.md` documents:
   - entry points
   - resolution rules
   - inlined and kept imports
@@ -515,7 +516,7 @@ Treat this list as orientation, not permission to ignore other necessary files. 
   - cycles, repeats, and charset
   - `url()` rewriting
   - problem codes
-- [ ] Full suite and lint pass.
+- [x] Full suite and lint pass.
 
 **Validation**
 
@@ -528,10 +529,28 @@ Treat this list as orientation, not permission to ignore other necessary files. 
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Integrated stylesheet bundling through a two-pass static asset
+  scan, preserved standalone library publication and non-CSS behavior, added
+  cross-entry stylesheet problem deduplication, removed the obsolete standalone
+  CSS comment stripper, added scanner coverage, and documented operator-facing
+  behavior.
+- Current state: Complete.
+- Remaining: None for Task C. The framework documentation listed under "Out of
+  scope" still needs project-owner follow-up because it describes the previous
+  absence of production CSS bundling.
+- Decisions and discoveries: Stylesheet problem deduplication has its own key
+  set; applying the CSS key to all scanner problems would incorrectly collapse
+  distinct positionless manifest problems. `public/` remains on the original
+  verbatim one-pass path. Byte-stability fixtures formerly owned by
+  `stripCssComments` now live with the stylesheet renderer tests.
+- Actual files changed: `lib/publishing/scan-content-sources.js`;
+  `lib/publishing/strip-asset-comments.js`;
+  `test/unit-tests/lib/publishing/scan-content-sources.test.js`;
+  `test/unit-tests/lib/publishing/strip-asset-comments.test.js`;
+  `test/unit-tests/lib/publishing/parse-stylesheet.test.js`; `docs/app.md`;
+  `agents/plans/css-import-bundling.md`.
+- Validation run: focused parser, scanner, and comment-stripper tests (33
+  passed); `npm test` (474 passed); `git diff --check` (passed); documented
+  sample-app scan command (no problems and bundled `admin.css` with no local
+  imports; passed).
 - Blockers: None.

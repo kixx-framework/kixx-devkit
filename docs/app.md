@@ -71,6 +71,43 @@ Output includes environment, origin, build id, resource counts, uploaded
 resources, unmatched files, and the Release id. No checkout-local publishing
 state is read or written.
 
+### Stylesheet bundling
+
+Every `.css` file under `static-assets/` is published as an entry point. Local
+unconditioned `@import` rules are recursively inlined in cascade order, while
+each imported library file is also published as its own static asset. Changing
+an imported file therefore changes the entry point's content hash. Stylesheets
+under `public/` remain verbatim and are not bundled.
+
+Imports may use root-relative paths or paths relative to the importing file.
+Targets must remain inside `static-assets/`, use canonical lowercase pathnames,
+end in `.css`, and omit query strings and fragments. Relative paths may not
+climb above the site root. Missing and invalid targets stop publishing.
+
+External imports (a URL scheme or `//`) stay unchanged. Imports with media,
+`supports()`, or `layer` conditions also stay as browser fallbacks; local
+conditioned paths are rewritten root-relative and their targets are validated.
+All kept imports must precede significant bundled content. This includes rules
+inlined by an earlier import.
+
+Repeated imports are inlined at every occurrence. Import cycles are rejected
+with the import chain. The entry point keeps a leading UTF-8 `@charset`; charset
+rules are removed from inlined files, and other encodings are rejected.
+
+Relative `url()` references are rewritten root-relative from the stylesheet
+that contains them, retaining query strings and fragments. Root-relative,
+external, data, fragment-only, and empty URLs are unchanged. Relative bare
+strings in `image-set()` must instead use `url()`.
+
+Stylesheet validation reports these problem codes:
+
+- `css-import-missing`
+- `css-import-invalid`
+- `css-import-misplaced`
+- `css-import-cycle`
+- `css-charset-unsupported`
+- `css-url-invalid`
+
 ## `rollback`
 
 Inspect recent history without writing:

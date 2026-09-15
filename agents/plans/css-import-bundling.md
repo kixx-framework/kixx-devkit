@@ -309,7 +309,7 @@ Treat this list as orientation, not permission to ignore other necessary files. 
 
 ### Task B: Bundle a stylesheet's import graph
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** A
 **Documentation:** This plan, "Agreed decisions" and "Cross-cutting invariants"; `agents/docs/code-style-guide.md`; `agents/docs/code-documentation-guide.md`; `test/README.md`
 
@@ -383,22 +383,22 @@ Treat this list as orientation, not permission to ignore other necessary files. 
 
 **Acceptance criteria**
 
-- [ ] The sample app's shape (`admin.css` → `stylesheet.css` → libraries)
+- [x] The sample app's shape (`admin.css` → `stylesheet.css` → libraries)
   bundles into a flat file with no local `@import`, in source cascade order.
-- [ ] Relative and root-relative imports both resolve. Imports in nested files
+- [x] Relative and root-relative imports both resolve. Imports in nested files
   resolve against the nested file's pathname.
-- [ ] Each `css-import-invalid` case (query, fragment, above root, invalid
+- [x] Each `css-import-invalid` case (query, fragment, above root, invalid
   pathname, non-`.css`) and `css-import-missing` is reported.
-- [ ] External and conditioned imports are kept. Relative conditioned
+- [x] External and conditioned imports are kept. Relative conditioned
   specifiers are rewritten, and a missing conditioned target is a problem.
-- [ ] A kept import after inlined content is `css-import-misplaced`, naming
+- [x] A kept import after inlined content is `css-import-misplaced`, naming
   the entry and chain. One before any content is accepted.
-- [ ] Direct and indirect cycles are reported with chains.
-- [ ] A diamond import is inlined twice, and `sourceFiles` lists it once.
-- [ ] The entry's `@charset` is kept, and inlined charsets are removed.
-- [ ] Relative `url()`s in inlined files resolve from their own file, not the
+- [x] Direct and indirect cycles are reported with chains.
+- [x] A diamond import is inlined twice, and `sourceFiles` lists it once.
+- [x] The entry's `@charset` is kept, and inlined charsets are removed.
+- [x] Relative `url()`s in inlined files resolve from their own file, not the
   entry.
-- [ ] JSDoc on the exported function; lint clean.
+- [x] JSDoc on the exported function; lint clean.
 
 **Validation**
 
@@ -407,12 +407,24 @@ Treat this list as orientation, not permission to ignore other necessary files. 
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added pure in-memory stylesheet graph bundling with local import
+  resolution, recursive inlining, kept-import rewriting, flattened placement
+  checks, cycle detection, charset handling, contributor tracking, and graph
+  diagnostics. Added focused coverage for every Task B acceptance criterion.
+- Current state: Complete.
+- Remaining: None for Task B. Task C will connect the bundler to static asset
+  scanning and own cross-entry problem deduplication.
+- Decisions and discoveries: Parse results are memoized separately from
+  rendering so repeated imports remain repeated in output. File-local placement
+  problems remain unchanged; Task B adds placement details only when earlier
+  flattened content creates the violation. Missing conditioned imports remain
+  in output as rewritten browser fallbacks while still reporting a problem.
+- Actual files changed: `lib/publishing/bundle-stylesheet.js`;
+  `test/unit-tests/lib/publishing/bundle-stylesheet.test.js`;
+  `agents/plans/css-import-bundling.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/publishing/bundle-stylesheet.test.js`
+  (12 passed); `npm test` (471 passed); `git diff --check` (passed); sample-app
+  `admin.css` smoke bundle (10 source files, no imports or problems; passed).
 - Blockers: None.
 
 

@@ -9,6 +9,7 @@ import {
 } from 'kixx-assert';
 
 import scanContentSources from '../../../../lib/publishing/scan-content-sources.js';
+import { assertPublishableContentSources } from '../../../../lib/publishing/content-source-report.js';
 
 
 describe('publishing/scan-content-sources', ({ after, it }) => {
@@ -163,6 +164,113 @@ describe('publishing/scan-content-sources', ({ after, it }) => {
             'emails/extra.txt,pages/orphan.txt,templates/README.md',
             result.unmatchedFiles.join(','),
         );
+    });
+
+    it('bundles stylesheet entry points and still publishes library files', async () => {
+        const directory = await makeProject(directories, {
+            'static-assets/stylesheets/stylesheet.css': [
+                '@import "lib/reset.css";',
+                '@import "/stylesheets/lib/layout.css";',
+                '.site { background: url(../images/site.svg); }',
+            ].join('\n'),
+            'static-assets/stylesheets/admin.css': [
+                '@import "stylesheet.css";',
+                '@import "lib/admin.css";',
+                '.admin {}',
+            ].join('\n'),
+            'static-assets/stylesheets/lib/reset.css': '.reset {}',
+            'static-assets/stylesheets/lib/layout.css': '.layout {}',
+            'static-assets/stylesheets/lib/admin.css': '.admin-shell {}',
+        });
+
+        const result = await scanContentSources(directory);
+        const stylesheet = findResource(
+            result,
+            'StaticAsset',
+            'stylesheets/stylesheet.css',
+        );
+        const admin = findResource(result, 'StaticAsset', 'stylesheets/admin.css');
+
+        assertEqual(0, result.problems.length);
+        assertEqual(false, decode(stylesheet.payload).includes('@import'));
+        assertEqual(false, decode(admin.payload).includes('@import'));
+        assert(decode(admin.payload).indexOf('.reset {}') <
+            decode(admin.payload).indexOf('.site'));
+        assert(decode(admin.payload).indexOf('.site') <
+            decode(admin.payload).indexOf('.admin-shell'));
+        assert(decode(stylesheet.payload).includes('url("/images/site.svg")'));
+        assertEqual([
+            'static-assets/stylesheets/admin.css',
+            'static-assets/stylesheets/stylesheet.css',
+            'static-assets/stylesheets/lib/reset.css',
+            'static-assets/stylesheets/lib/layout.css',
+            'static-assets/stylesheets/lib/admin.css',
+        ].join(','), admin.sourceFiles.join(','));
+        assert(findResource(
+            result,
+            'StaticAsset',
+            'stylesheets/lib/reset.css',
+        ));
+    });
+
+    it('changes entry hashes when an imported stylesheet changes', async () => {
+        const firstDirectory = await makeProject(directories, {
+            'static-assets/styles/main.css': '@import "lib/token.css";\na {}',
+            'static-assets/styles/lib/token.css': ':root { --color: red; }',
+        });
+        const secondDirectory = await makeProject(directories, {
+            'static-assets/styles/main.css': '@import "lib/token.css";\na {}',
+            'static-assets/styles/lib/token.css': ':root { --color: blue; }',
+        });
+
+        const first = await scanContentSources(firstDirectory);
+        const second = await scanContentSources(secondDirectory);
+        const firstEntry = findResource(first, 'StaticAsset', 'styles/main.css');
+        const secondEntry = findResource(second, 'StaticAsset', 'styles/main.css');
+
+        assert(firstEntry.hash !== secondEntry.hash);
+    });
+
+    it('deduplicates a library problem reached from several entries', async () => {
+        const directory = await makeProject(directories, {
+            'static-assets/one.css': '@import "lib/shared.css";',
+            'static-assets/two.css': '@import "lib/shared.css";',
+            'static-assets/lib/shared.css': '@import "missing.css";',
+        });
+
+        const result = await scanContentSources(directory);
+        const problems = result.problems.filter(({ code }) => {
+            return code === 'css-import-missing';
+        });
+
+        assertEqual(1, problems.length);
+        assertEqual('static-assets/lib/shared.css', problems[0].filepath);
+        assertEqual(1, problems[0].line);
+        assertEqual(0, problems[0].column);
+    });
+
+    it('makes stylesheet problems fail publishability', async () => {
+        const directory = await makeProject(directories, {
+            'static-assets/main.css': '@import "missing.css";',
+        });
+        const result = await scanContentSources(directory);
+        const caught = catchError(() => assertPublishableContentSources(result));
+
+        assert(caught, 'expected stylesheet problems to prevent publishing');
+        assertMatches('css', result.problems[0].code);
+        assertMatches('Nothing was published.', caught.message);
+    });
+
+    it('leaves public stylesheets verbatim', async () => {
+        const source = '/* keep */\n@import "relative.css";';
+        const directory = await makeProject(directories, {
+            'public/site.css': source,
+        });
+        const result = await scanContentSources(directory);
+        const resource = findResource(result, 'StaticAsset', 'site.css');
+
+        assertEqual(source, decode(resource.payload));
+        assertEqual('public/site.css', resource.sourceFiles.join(','));
     });
 
     it('returns manifest shape problems without throwing', async () => {
@@ -368,4 +476,14 @@ function count(values, expected) {
 
 function resourceIdentity(resource) {
     return `${ resource.type }:${ resource.pathname }:${ resource.hash }:${ resource.size }`;
+}
+
+function catchError(fn) {
+    try {
+        fn();
+    } catch (error) {
+        return error;
+    }
+
+    return null;
 }

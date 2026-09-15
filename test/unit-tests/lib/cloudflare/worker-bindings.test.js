@@ -6,7 +6,7 @@ import CloudflareWorkerVersion from '../../../../lib/cloudflare/cloudflare-worke
 
 describe('worker-bindings', ({ it }) => {
     it('produces the expected binding set from a full sample environment', () => {
-        const bindings = build({ secrets: { API_SECRET: 'shh' } });
+        const bindings = build({ secretNames: [ 'API_SECRET' ] });
 
         const byType = groupByType(bindings);
 
@@ -16,21 +16,22 @@ describe('worker-bindings', ({ it }) => {
         assertEqual(1, byType.r2_bucket.length);
         // TRUST_PROXY, plus the injected ENVIRONMENT.
         assertEqual(2, byType.plain_text.length);
-        assertEqual(1, byType.secret_text.length);
+        assertEqual(1, byType.inherit.length);
     });
 
-    it('binds the plain file as plain_text and the secrets file as secret_text', () => {
+    it('binds plain values and inherits declared secrets from an exact version', () => {
         const bindings = build({
             envars: { TRUST_PROXY: 'false' },
-            secrets: { API_SECRET: 'shh' },
+            secretNames: [ 'API_SECRET' ],
+            secretVersionId: 'source-version',
         });
 
         const byName = groupByName(bindings);
 
         assertEqual('plain_text', byName.TRUST_PROXY.type);
         assertEqual('false', byName.TRUST_PROXY.text);
-        assertEqual('secret_text', byName.API_SECRET.type);
-        assertEqual('shh', byName.API_SECRET.text);
+        assertEqual('inherit', byName.API_SECRET.type);
+        assertEqual('source-version', byName.API_SECRET.version_id);
     });
 
     it('binds ENVIRONMENT from the environment name, ignoring the value in the plain file', () => {
@@ -51,8 +52,8 @@ describe('worker-bindings', ({ it }) => {
         assertEqual('production', bindings[0].text);
     });
 
-    it('never includes BUILD_ID even with unrelated envars and secrets', () => {
-        const bindings = build({ secrets: { API_SECRET: 'shh' } });
+    it('never includes BUILD_ID with unrelated envars and declared secrets', () => {
+        const bindings = build({ secretNames: [ 'API_SECRET' ] });
 
         assert(!bindings.some((binding) => binding.name === 'BUILD_ID'), 'expected no BUILD_ID binding');
     });
@@ -67,7 +68,7 @@ describe('worker-bindings', ({ it }) => {
     });
 
     it('omits every config block independently', () => {
-        const bindings = build({ environmentConfig: {}, envars: {}, secrets: {} });
+        const bindings = build({ environmentConfig: {}, envars: {}, secretNames: [] });
 
         assertEqual(1, bindings.length);
         assertEqual('ENVIRONMENT', bindings[0].name);
@@ -101,27 +102,19 @@ describe('worker-bindings', ({ it }) => {
         assert(caught.message.includes('.env.production'), 'expected the message to name the file');
     });
 
-    it('throws naming the secrets file when it declares BUILD_ID', () => {
-        const caught = catchError(() => build({ secrets: { BUILD_ID: 'nope' } }));
-
-        assert(caught, 'expected an error to be thrown');
-        assertEqual('UsageError', caught.name);
-        assert(caught.message.includes('.env.production.secrets'), 'expected the message to name the file');
-    });
-
-    it('throws naming both files for a name written in both of them', () => {
+    it('throws naming both sources for a plain name colliding with a declared secret', () => {
         const caught = catchError(() => {
-            return build({ envars: { API_SECRET: 'plain' }, secrets: { API_SECRET: 'secret' } });
+            return build({ envars: { API_SECRET: 'plain' }, secretNames: [ 'API_SECRET' ] });
         });
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
         assert(caught.message.includes('.env.production'), 'expected the message to name the plain file');
-        assert(caught.message.includes('.env.production.secrets'), 'expected the message to name the secrets file');
+        assert(caught.message.includes('example.env.secrets'), 'expected the message to name the declaration file');
     });
 
     it('throws naming both sources for a dotenv name colliding with a config binding name', () => {
-        const caught = catchError(() => build({ secrets: { DOCUMENT_STORE: 'collides' } }));
+        const caught = catchError(() => build({ secretNames: [ 'DOCUMENT_STORE' ] }));
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
@@ -143,7 +136,7 @@ describe('worker-bindings', ({ it }) => {
     it('sorts the result by name regardless of input key order', () => {
         const config = makeEnvironmentConfig();
 
-        const bindingsOne = build({ environmentConfig: config, secrets: { API_SECRET: 'shh' } });
+        const bindingsOne = build({ environmentConfig: config, secretNames: [ 'API_SECRET' ] });
 
         const reordered = {
             OBJECT_STORE: config.OBJECT_STORE,
@@ -151,7 +144,7 @@ describe('worker-bindings', ({ it }) => {
             KEY_VALUE_STORE: config.KEY_VALUE_STORE,
             DOCUMENT_STORE: config.DOCUMENT_STORE,
         };
-        const bindingsTwo = build({ environmentConfig: reordered, secrets: { API_SECRET: 'shh' } });
+        const bindingsTwo = build({ environmentConfig: reordered, secretNames: [ 'API_SECRET' ] });
 
         assertEqual(JSON.stringify(bindingsOne), JSON.stringify(bindingsTwo));
 
@@ -160,17 +153,8 @@ describe('worker-bindings', ({ it }) => {
         assertEqual(sortedNames.join(','), names.join(','));
     });
 
-    it('produces a secret_text binding with an empty text for an empty-string secret', () => {
-        const bindings = build({ environmentConfig: {}, secrets: { EMPTY_SECRET: '' } });
-
-        const byName = groupByName(bindings);
-
-        assertEqual('secret_text', byName.EMPTY_SECRET.type);
-        assertEqual('', byName.EMPTY_SECRET.text);
-    });
-
     it('produces bindings every one of which CloudflareWorkerVersion#addBinding() accepts', () => {
-        const bindings = build({ secrets: { API_SECRET: 'shh' } });
+        const bindings = build({ secretNames: [ 'API_SECRET' ] });
 
         const version = new CloudflareWorkerVersion();
 
@@ -211,10 +195,11 @@ function build(args) {
         environmentConfig = makeEnvironmentConfig(),
         environment = 'production',
         envars = { TRUST_PROXY: 'false' },
-        secrets = {},
+        secretNames = [],
+        secretVersionId = 'source-version-id',
     } = args;
 
-    return buildWorkerBindings({ environmentConfig, environment, envars, secrets });
+    return buildWorkerBindings({ environmentConfig, environment, envars, secretNames, secretVersionId });
 }
 
 function groupByName(bindings) {

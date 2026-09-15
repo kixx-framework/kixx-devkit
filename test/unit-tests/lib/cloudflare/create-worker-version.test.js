@@ -12,6 +12,8 @@ const ENVIRONMENT = 'production';
 const STATE_FILEPATH = '/app/.kixx/cloudflare-state.production.json';
 const ENVARS_FILEPATH = '/app/.env.production';
 const SECRETS_FILEPATH = '/app/.env.production.secrets';
+const DECLARATIONS_FILEPATH = '/app/example.env.secrets';
+const SOURCE_VERSION_ID = 'source-version-id';
 
 describe('create-worker-version', ({ it }) => {
     it('throws a UsageError naming the dotted path for a missing environment block', async () => {
@@ -64,19 +66,19 @@ describe('create-worker-version', ({ it }) => {
         assert(!Object.prototype.hasOwnProperty.call(fileSystem.written, STATE_FILEPATH), 'expected no state file written');
     });
 
-    it('throws a UsageError naming the secrets file when it is missing', async () => {
-        const fileSystem = makeFileSystem({});
+    it('throws a UsageError naming the declaration file when it is missing', async () => {
+        const fileSystem = makeFileSystem({ [DECLARATIONS_FILEPATH]: null });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
         const caught = await catchAsyncError(() => createWorkerVersion(runOptions({ apiClient, fileSystem })));
 
         assert(caught, 'expected an error to be thrown');
         assertEqual('UsageError', caught.name);
-        assert(caught.message.includes(SECRETS_FILEPATH), 'expected the message to name the secrets file');
+        assert(caught.message.includes(DECLARATIONS_FILEPATH), 'expected the message to name the declaration file');
         assertEqual(0, apiClient.calls.createWorkerVersion.length);
     });
 
-    it('uploads the two dotenv files as plain_text and secret_text, plus BUILD_ID and ENVIRONMENT', async () => {
+    it('uploads plain values and exact inherited secrets, plus BUILD_ID and ENVIRONMENT', async () => {
         const fileSystem = makeFileSystem({
             [ENVARS_FILEPATH]: 'ENVIRONMENT=development\nTRUST_PROXY=false\n',
             [SECRETS_FILEPATH]: 'API_SECRET=shh\n',
@@ -93,7 +95,8 @@ describe('create-worker-version', ({ it }) => {
         }
 
         assertEqual('plain_text', byName.TRUST_PROXY.type);
-        assertEqual('secret_text', byName.API_SECRET.type);
+        assertEqual('inherit', byName.API_SECRET.type);
+        assertEqual(SOURCE_VERSION_ID, byName.API_SECRET.version_id);
         assertEqual('plain_text', byName.BUILD_ID.type);
         assertEqual(result.buildId, byName.BUILD_ID.text);
 
@@ -102,17 +105,93 @@ describe('create-worker-version', ({ it }) => {
         assertEqual('production', byName.ENVIRONMENT.text);
     });
 
-    it('uploads on a first run with no state file, with changes all true', async () => {
-        const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
+    it('fails before bundling or upload when no source state exists', async () => {
+        const fileSystem = makeFileSystem({ [STATE_FILEPATH]: null });
+        const bundleModules = makeBundler('export default 1;');
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
+
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ apiClient, fileSystem, bundleModules }));
+        });
+
+        assert(caught, 'expected missing source state to be rejected');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('No source Worker version'), 'expected bootstrap guidance');
+        assertEqual(0, bundleModules.callCount);
+        assertEqual(0, apiClient.calls.createWorkerVersion.length);
+    });
+
+    it('creates a bootstrap base when state and active declarations are both absent', async () => {
+        const fileSystem = makeFileSystem({
+            [STATE_FILEPATH]: null,
+            [DECLARATIONS_FILEPATH]: '# Declare secrets after this base exists.\n',
+        });
+        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'base-version-id' }) });
 
         const result = await createWorkerVersion(runOptions({ apiClient, fileSystem }));
 
         assertEqual('created', result.outcome);
-        assertEqual(true, result.changes.modules);
-        assertEqual(true, result.changes.bindings);
-        assertEqual(true, result.changes.config);
-        assert(Object.prototype.hasOwnProperty.call(fileSystem.written, STATE_FILEPATH), 'expected state to be written');
+        assertEqual(0, apiClient.calls.getWorkerVersion.length);
+        assertEqual(0, apiClient.calls.listWorkerVersions.length);
+        assert(
+            !apiClient.calls.createWorkerVersion[0].version.bindings.some((binding) => binding.type === 'inherit'),
+            'expected no inherited bindings in the bootstrap version',
+        );
+        const state = JSON.parse(fileSystem.written[STATE_FILEPATH]);
+        assertEqual('base-version-id', state.versionId);
+        assertEqual(0, state.secretNames.length);
+    });
+
+    it('fails before bundling when a declared secret is absent from source state', async () => {
+        const state = JSON.parse(makeBaseState());
+        state.secretNames = [];
+        const fileSystem = makeFileSystem({ [STATE_FILEPATH]: JSON.stringify(state) });
+        const bundleModules = makeBundler('export default 1;');
+        const apiClient = makeApiClient({});
+
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ apiClient, fileSystem, bundleModules }));
+        });
+
+        assert(caught, 'expected missing declared secret state to be rejected');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('API_SECRET'), 'expected the missing name');
+        assertEqual(0, bundleModules.callCount);
+        assertEqual(0, apiClient.calls.createWorkerVersion.length);
+    });
+
+    it('fails before bundling when the recorded source version is absent', async () => {
+        const bundleModules = makeBundler('export default 1;');
+        const apiClient = makeApiClient({
+            getWorkerVersion: async () => {
+                throw new CloudflareApiError('not found', { status: 404, method: 'GET', url: 'x' });
+            },
+        });
+
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ apiClient, bundleModules }));
+        });
+
+        assert(caught, 'expected absent source version to be rejected');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes(SOURCE_VERSION_ID), 'expected the source version ID');
+        assertEqual(0, bundleModules.callCount);
+        assertEqual(0, apiClient.calls.createWorkerVersion.length);
+    });
+
+    it('fails before bundling when a newer remote version makes state stale', async () => {
+        const bundleModules = makeBundler('export default 1;');
+        const apiClient = makeApiClient({ listWorkerVersions: () => [ { id: 'newer-version-id' } ] });
+
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ apiClient, bundleModules }));
+        });
+
+        assert(caught, 'expected stale source state to be rejected');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('newer-version-id'), 'expected the latest remote version ID');
+        assertEqual(0, bundleModules.callCount);
+        assertEqual(0, apiClient.calls.createWorkerVersion.length);
     });
 
     it('skips a second run with unchanged inputs, making no createWorkerVersion call', async () => {
@@ -146,7 +225,7 @@ describe('create-worker-version', ({ it }) => {
         assertEqual(false, result.changes.config);
     });
 
-    it('uploads with only changes.bindings true when a secret value changes', async () => {
+    it('ignores local secret-file values and does not open the file', async () => {
         const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
@@ -155,10 +234,32 @@ describe('create-worker-version', ({ it }) => {
         fileSystem.files[SECRETS_FILEPATH] = 'API_SECRET=different\n';
         const result = await createWorkerVersion(runOptions({ apiClient, fileSystem }));
 
-        assertEqual('created', result.outcome);
+        assertEqual('skipped', result.outcome);
         assertEqual(false, result.changes.modules);
-        assertEqual(true, result.changes.bindings);
+        assertEqual(false, result.changes.bindings);
         assertEqual(false, result.changes.config);
+        assert(!fileSystem.reads.includes(SECRETS_FILEPATH), 'expected the local secrets file not to be opened');
+    });
+
+    it('changes the binding hash for declaration and inheritance-source changes', async () => {
+        const base = await prepareWorkerVersion(runOptions({}));
+        const declarationState = JSON.parse(makeBaseState());
+        declarationState.secretNames.push('SECOND_SECRET');
+        const declaration = await prepareWorkerVersion(runOptions({
+            fileSystem: makeFileSystem({
+                [DECLARATIONS_FILEPATH]: 'API_SECRET=example\nSECOND_SECRET=example\n',
+                [STATE_FILEPATH]: JSON.stringify(declarationState),
+            }),
+        }));
+        const sourceState = JSON.parse(makeBaseState());
+        sourceState.versionId = 'other-source-version';
+        const source = await prepareWorkerVersion(runOptions({
+            fileSystem: makeFileSystem({ [STATE_FILEPATH]: JSON.stringify(sourceState) }),
+            apiClient: makeApiClient({ listWorkerVersions: () => [ { id: 'other-source-version' } ] }),
+        }));
+
+        assert(base.hashes.bindingsHash !== declaration.hashes.bindingsHash, 'expected declaration hash change');
+        assert(base.hashes.bindingsHash !== source.hashes.bindingsHash, 'expected source-version hash change');
     });
 
     it('uploads with only changes.config true when compatibility_date changes', async () => {
@@ -206,11 +307,9 @@ describe('create-worker-version', ({ it }) => {
     });
 
     it('produces the same three hashes across two independent runs whose only difference is the clock', async () => {
-        const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
-
         const fileSystemOne = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         await createWorkerVersion(runOptions({
-            apiClient,
+            apiClient: makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) }),
             fileSystem: fileSystemOne,
             now: () => new Date('2026-01-01T00:00:00.000Z'),
         }));
@@ -218,7 +317,7 @@ describe('create-worker-version', ({ it }) => {
 
         const fileSystemTwo = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         await createWorkerVersion(runOptions({
-            apiClient,
+            apiClient: makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) }),
             fileSystem: fileSystemTwo,
             now: () => new Date('2027-01-01T00:00:00.000Z'),
         }));
@@ -402,6 +501,7 @@ describe('create-worker-version', ({ it }) => {
 
         const provisioned = makeApiClient({
             getWorker: () => deployedWorker([ 'ContentAddressableIndexStore' ]),
+            listWorkerVersions: () => [ { id: 'version-id' } ],
             createWorkerVersion: async () => ({ id: 'version-id' }),
         });
 
@@ -470,7 +570,9 @@ describe('create-worker-version', ({ it }) => {
         const state = JSON.parse(fileSystem.written[STATE_FILEPATH]);
 
         assertEqual(false, call.options.deploy);
+        assertEqual(true, call.options.strictBindingsInheritance);
         assertEqual(false, state.deployed);
+        assertEqual('API_SECRET', state.secretNames.join(','));
         assertEqual(false, result.deployed);
     });
 
@@ -508,7 +610,7 @@ describe('create-worker-version', ({ it }) => {
         );
     });
 
-    it('uploads to the newly configured Worker when WORKER.name is retargeted', async () => {
+    it('rejects state belonging to a different configured Worker', async () => {
         const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });
 
@@ -518,16 +620,14 @@ describe('create-worker-version', ({ it }) => {
         const config = makeCloudflareConfig();
         config.environments.production.WORKER.name = 'kixx-test-app-2';
 
-        const result = await createWorkerVersion(runOptions({ apiClient, fileSystem, cloudflareConfig: config }));
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ apiClient, fileSystem, cloudflareConfig: config }));
+        });
 
-        assertEqual('created', result.outcome);
-        assertEqual('kixx-test-app-2', result.workerName);
-        assertEqual('kixx-test-app', result.retargetedFrom);
-        assertEqual(false, result.changes.modules);
-        assertEqual(false, result.changes.bindings);
-        assertEqual(false, result.changes.config);
-        assertEqual(2, apiClient.calls.createWorkerVersion.length);
-        assertEqual('kixx-test-app-2', apiClient.calls.createWorkerVersion[1].workerName);
+        assert(caught, 'expected retargeted state to be rejected');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('kixx-test-app-2'), 'expected configured Worker name');
+        assertEqual(1, apiClient.calls.createWorkerVersion.length);
     });
 
     it('reports retargetedFrom as null when the Worker name is unchanged', async () => {
@@ -644,7 +744,7 @@ function runOptions(overrides) {
         cloudflareConfig: makeCloudflareConfig(),
         apiClient: makeApiClient({}),
         bundleModules: makeBundler('export default 1;'),
-        fileSystem: makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' }),
+        fileSystem: makeFileSystem({}),
         now: () => FIXED_DATE,
         ...overrides,
     };
@@ -690,17 +790,30 @@ function makeBundler(source) {
 // The plain dotenv file is required and carries nothing a test varies, so it
 // is supplied by default; a test naming it overrides the default.
 function makeFileSystem(suppliedFiles) {
-    const files = { [ENVARS_FILEPATH]: 'TRUST_PROXY=false\n', ...suppliedFiles };
+    const files = {
+        [ENVARS_FILEPATH]: 'TRUST_PROXY=false\n',
+        [DECLARATIONS_FILEPATH]: 'API_SECRET=example-only\n',
+        [STATE_FILEPATH]: makeBaseState(),
+        ...suppliedFiles,
+    };
+    for (const [ filepath, contents ] of Object.entries(files)) {
+        if (contents === null) {
+            delete files[filepath];
+        }
+    }
     const written = {};
+    const reads = [];
 
     return {
         files,
         written,
+        reads,
         async isFile(filepath) {
             return Object.prototype.hasOwnProperty.call(files, filepath) ||
                 Object.prototype.hasOwnProperty.call(written, filepath);
         },
         async readFile(filepath) {
+            reads.push(filepath);
             if (Object.prototype.hasOwnProperty.call(written, filepath)) {
                 return written[filepath];
             }
@@ -715,6 +828,20 @@ function makeFileSystem(suppliedFiles) {
     };
 }
 
+function makeBaseState() {
+    return JSON.stringify({
+        workerName: 'kixx-test-app',
+        buildId: 'source-build-id',
+        versionId: SOURCE_VERSION_ID,
+        createdAt: '2026-08-28T12:00:00.000Z',
+        deployed: false,
+        modulesHash: null,
+        bindingsHash: null,
+        configHash: null,
+        secretNames: [ 'API_SECRET' ],
+    });
+}
+
 function makeApiClient(implementations) {
     const calls = {
         getWorker: [],
@@ -725,7 +852,10 @@ function makeApiClient(implementations) {
         createKVNamespace: [],
         createD1Database: [],
         createWorkerVersion: [],
+        getWorkerVersion: [],
+        listWorkerVersions: [],
     };
+    let latestVersionId = SOURCE_VERSION_ID;
 
     return {
         calls,
@@ -761,11 +891,26 @@ function makeApiClient(implementations) {
                 ? implementations.createD1Database(payload)
                 : { uuid: 'created-database-id' };
         },
+        async getWorkerVersion(workerName, versionId) {
+            calls.getWorkerVersion.push({ workerName, versionId });
+            return implementations.getWorkerVersion
+                ? implementations.getWorkerVersion(workerName, versionId)
+                : { id: versionId };
+        },
+        async listWorkerVersions(workerName, options) {
+            calls.listWorkerVersions.push({ workerName, options });
+            return implementations.listWorkerVersions
+                ? implementations.listWorkerVersions(workerName, options)
+                : [ { id: latestVersionId } ];
+        },
         async createWorkerVersion(workerName, version, options) {
             calls.createWorkerVersion.push({ workerName, version, options });
-            return implementations.createWorkerVersion
+            const result = implementations.createWorkerVersion
                 ? implementations.createWorkerVersion(workerName, version, options)
                 : { id: 'version-id' };
+            const resolved = await result;
+            latestVersionId = resolved.id;
+            return resolved;
         },
     };
 }

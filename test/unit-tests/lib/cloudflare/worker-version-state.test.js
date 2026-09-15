@@ -15,6 +15,7 @@ const VALID_STATE = {
     modulesHash: '4f2a',
     bindingsHash: '9c1e',
     configHash: '77bd',
+    secretNames: [ 'API_KEY', 'SIGNING_SECRET' ],
 };
 
 describe('worker-version-state', ({ it }) => {
@@ -41,6 +42,7 @@ describe('worker-version-state', ({ it }) => {
         assertEqual(VALID_STATE.workerName, state.workerName);
         assertEqual(VALID_STATE.versionId, state.versionId);
         assertEqual(VALID_STATE.configHash, state.configHash);
+        assertEqual('API_KEY,SIGNING_SECRET', state.secretNames.join(','));
     });
 
     it('throws a UsageError naming the path for invalid JSON', async () => {
@@ -95,6 +97,47 @@ describe('worker-version-state', ({ it }) => {
         assertEqual(null, state.modulesHash);
     });
 
+    it('rejects malformed, duplicate, and unsorted secretNames', async () => {
+        const invalidValues = [
+            'API_KEY',
+            [ 'API_KEY', '' ],
+            [ 'API_KEY', 'API_KEY' ],
+            [ 'SIGNING_SECRET', 'API_KEY' ],
+        ];
+
+        for (const secretNames of invalidValues) {
+            const filepath = '/app/.kixx/cloudflare-state.production.json';
+            const fileSystem = makeFileSystem({
+                [filepath]: JSON.stringify({ ...VALID_STATE, secretNames }),
+            });
+            const caught = await catchAsyncError(() => {
+                return readWorkerVersionState({
+                    projectDirectory: '/app',
+                    environment: 'production',
+                    fileSystem,
+                });
+            });
+
+            assertEqual('UsageError', caught.name);
+            assert(caught.message.includes('secretNames') || caught.message.includes('secret name'));
+        }
+    });
+
+    it('validates secretNames before writing state', async () => {
+        const fileSystem = makeFileSystem({});
+        const caught = await catchAsyncError(() => {
+            return writeWorkerVersionState({
+                projectDirectory: '/app',
+                environment: 'production',
+                state: { ...VALID_STATE, secretNames: [ 'ZETA', 'ALPHA' ] },
+                fileSystem,
+            });
+        });
+
+        assertEqual('UsageError', caught.name);
+        assertEqual(0, Object.keys(fileSystem.written).length);
+    });
+
     it('reads a file still carrying the removed Durable Object fields', async () => {
         const filepath = '/app/.kixx/cloudflare-state.production.json';
         const legacy = {
@@ -124,7 +167,11 @@ describe('worker-version-state', ({ it }) => {
         const state = await readWorkerVersionState({ projectDirectory: '/app', environment: 'production', fileSystem: reread });
 
         for (const field of Object.keys(VALID_STATE)) {
-            assertEqual(VALID_STATE[field], state[field]);
+            const expected = Array.isArray(VALID_STATE[field])
+                ? VALID_STATE[field].join(',')
+                : VALID_STATE[field];
+            const actual = Array.isArray(state[field]) ? state[field].join(',') : state[field];
+            assertEqual(expected, actual);
         }
     });
 

@@ -123,6 +123,7 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
 
             version.addBinding({ type: 'd1', name: 'DB', id: 'd1-id' });
             version.addBinding({ type: 'durable_object_namespace', name: 'DO', class_name: 'Counter' });
+            version.addBinding({ type: 'inherit', name: 'INHERITED', version_id: 'version-id' });
             version.addBinding({ type: 'kv_namespace', name: 'CACHE', namespace_id: 'kv-id' });
             version.addBinding({ type: 'plain_text', name: 'ENV', text: 'production' });
             version.addBinding({ type: 'r2_bucket', name: 'MEDIA', bucket_name: 'media' });
@@ -131,15 +132,16 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
 
             const { bindings } = version.toJSON();
 
-            assertEqual(7, bindings.length);
+            assertEqual(8, bindings.length);
             assertEqual('d1-id', bindings[0].id);
             assertEqual('Counter', bindings[1].class_name);
-            assertEqual('kv-id', bindings[2].namespace_id);
-            assertEqual('production', bindings[3].text);
-            assertEqual('media', bindings[4].bucket_name);
-            assertEqual('sekret', bindings[5].text);
-            assertEqual('version_metadata', bindings[6].type);
-            assertEqual('META', bindings[6].name);
+            assertEqual('version-id', bindings[2].version_id);
+            assertEqual('kv-id', bindings[3].namespace_id);
+            assertEqual('production', bindings[4].text);
+            assertEqual('media', bindings[5].bucket_name);
+            assertEqual('sekret', bindings[6].text);
+            assertEqual('version_metadata', bindings[7].type);
+            assertEqual('META', bindings[7].name);
         });
 
         it('rejects an unsupported binding type and names the supported ones', () => {
@@ -154,6 +156,7 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
             const calls = [
                 [ { type: 'd1', name: 'DB' }, 'requires the id field' ],
                 [ { type: 'durable_object_namespace', name: 'DO' }, 'requires the class_name field' ],
+                [ { type: 'inherit', name: 'TOKEN' }, 'requires the version_id field' ],
                 [ { type: 'kv_namespace', name: 'CACHE' }, 'requires the namespace_id field' ],
                 [ { type: 'r2_bucket', name: 'MEDIA' }, 'requires the bucket_name field' ],
                 [ { type: 'plain_text', name: 'ENV' }, 'requires the text field as a string' ],
@@ -183,6 +186,18 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
 
             assert(caught, 'expected an empty namespace_id to be rejected');
             assertMatches('requires the namespace_id field', caught.message);
+
+            const inherited = catchError(() => {
+                return version.addBinding({ type: 'inherit', name: 'TOKEN', version_id: '' });
+            });
+            assert(inherited, 'expected an empty version_id to be rejected');
+            assertMatches('requires the version_id field', inherited.message);
+
+            const latest = catchError(() => {
+                return version.addBinding({ type: 'inherit', name: 'LATEST', version_id: 'latest' });
+            });
+            assert(latest, 'expected implicit latest inheritance to be rejected');
+            assertMatches('requires an exact version_id', latest.message);
         });
 
         it('drops fields not documented for the binding type', () => {

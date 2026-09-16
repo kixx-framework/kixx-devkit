@@ -156,9 +156,16 @@ Those facts determine whether standalone creation is safe.
 
 When state exists, the command verifies that it names the configured Worker,
 its exact source version still exists and is Cloudflare's latest version, and
-every declared secret appears in `state.secretNames`. Any mismatch stops before
-bundling or upload. This optimistic-concurrency guard prevents one checkout
-from building on top of remote changes made by another.
+that version holds a `secret_text` or `secret_key` binding for every declared
+secret. Any mismatch stops before bundling or upload. The version-freshness
+check prevents one checkout from building on top of remote changes made by
+another.
+
+Secret presence is read from Cloudflare, not local state, so a secret set with
+Wrangler or the dashboard counts. A binding of another type with a declared
+name does not. A missing secret fails with the names to set using
+`set-secrets`. Secrets on the source version that `example.env.secrets` does
+not declare produce a warning: built versions do not inherit them.
 
 #### 3. Resolve D1 and KV resources
 
@@ -281,10 +288,12 @@ replace the environment's state file. The record contains:
     "deployed": false,
     "modulesHash": "...",
     "bindingsHash": "...",
-    "configHash": "...",
-    "secretNames": ["API_KEY", "SIGNING_SECRET"]
+    "configHash": "..."
 }
 ```
+
+The record holds no secret names. A `secretNames` field written by an earlier
+version of this tool is ignored and dropped on the next write.
 
 A failed API request writes no new state. If the upload succeeds but the local
 write fails, a later run may create a duplicate version because it has no
@@ -339,6 +348,10 @@ Every set name must be an active assignment in `example.env.secrets`.
 file names the configured Worker and exact latest remote version before making
 one atomic mutation. Omitted names are unchanged.
 
+`set-secret` and `set-secrets` warn when the created version holds secrets
+that `example.env.secrets` does not declare. The next `create-worker-version`
+or `release` will not inherit them.
+
 ### `set-secret`
 
 ```sh
@@ -376,7 +389,7 @@ Deletion requires reviewed declaration removal:
 4. Promote the returned version, or build a later version from it.
 
 The command refuses to delete a name that is still actively declared or that
-the recorded source version does not list.
+is not a secret binding on the recorded source version in Cloudflare.
 
 ### Bootstrap and recovery
 
@@ -402,8 +415,8 @@ If local state is missing, recover the complete
 checkout that created Cloudflare's latest version. Confirm its `workerName`
 and `versionId` against Cloudflare before retrying. If Cloudflare reports a
 newer version, recover the state produced by that exact operation. There is no
-automatic adoption command because hashes, `BUILD_ID`, and known secret names
-cannot be reconstructed safely from an uncorrelated latest version.
+automatic adoption command because hashes and `BUILD_ID` cannot be
+reconstructed safely from an uncorrelated latest version.
 
 If Cloudflare creates a secret version but the local state write fails, the
 error prints that remote version ID. Preserve it and repair the state from the

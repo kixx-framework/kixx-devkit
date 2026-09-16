@@ -77,6 +77,10 @@ export default class CloudflareCreateWorkerVersionCommand {
             process.stdout.write(wrapText(renderCreated(result, previousState, newState, relativeStateFilepath)));
         }
 
+        if (result.undeclaredSecretNames.length > 0) {
+            process.stdout.write(wrapText(renderUndeclaredSecrets(result.undeclaredSecretNames)));
+        }
+
         return 0;
     }
 }
@@ -95,6 +99,16 @@ const RECONCILIATION_SECTIONS = [
     [ 'info', 'Info' ],
 ];
 
+
+// Undeclared secrets are harmless on the source version but silently absent
+// from every version built from it, which is worth saying before it matters.
+export function renderUndeclaredSecrets(names) {
+    return [
+        `Warning: the source Worker version has secrets not declared in example.env.secrets: ${ names.join(', ') }. ` +
+        'Built versions do not inherit them.',
+        '',
+    ].join('\n');
+}
 
 export function renderResourcesResolved(result, environment) {
     const count = result.resolvedResources.length;

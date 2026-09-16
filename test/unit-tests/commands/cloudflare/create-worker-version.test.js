@@ -3,6 +3,7 @@ import { assert, assertEqual } from 'kixx-assert';
 import {
     renderCreated,
     renderSkipped,
+    renderUndeclaredSecrets,
 } from '../../../../commands/cloudflare/create-worker-version.js';
 
 const PREVIOUS_STATE = {
@@ -32,6 +33,17 @@ describe('create-worker-version output', ({ describe }) => {
             assert(text.includes('Nothing changed since version previous-version-id'), text);
             assert(text.includes('--force'), text);
             assert(!text.includes('Durable Objects'), 'expected no Durable Object noise');
+        });
+    });
+
+    describe('renderUndeclaredSecrets()', ({ it }) => {
+        it('names each undeclared secret and says built versions do not inherit them', () => {
+            const text = renderUndeclaredSecrets([ 'OLD_SECRET', 'ZETA_KEY' ]);
+
+            assert(text.includes('OLD_SECRET, ZETA_KEY'), text);
+            assert(text.includes('example.env.secrets'), text);
+            assert(text.includes('do not inherit'), text);
+            assert(text.endsWith('\n'), 'expected terminal output ending in a newline');
         });
     });
 

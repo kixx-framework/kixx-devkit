@@ -139,23 +139,78 @@ describe('create-worker-version', ({ it }) => {
         );
         const state = JSON.parse(fileSystem.written[STATE_FILEPATH]);
         assertEqual('base-version-id', state.versionId);
-        assertEqual(0, state.secretNames.length);
+        assertEqual(undefined, state.secretNames);
+        assertEqual(0, result.undeclaredSecretNames.length);
     });
 
-    it('fails before bundling when a declared secret is absent from source state', async () => {
+    it('fails before bundling when the source version has no secret binding for a declared name', async () => {
+        const remoteBindings = [
+            [],
+            [ { type: 'plain_text', name: 'API_SECRET', text: 'not-a-secret' } ],
+        ];
+
+        for (const bindings of remoteBindings) {
+            const bundleModules = makeBundler('export default 1;');
+            const apiClient = makeApiClient({
+                getWorkerVersion: async (_workerName, versionId) => ({ id: versionId, bindings }),
+            });
+
+            const caught = await catchAsyncError(() => {
+                return createWorkerVersion(runOptions({ apiClient, bundleModules }));
+            });
+
+            assert(caught, 'expected a missing declared secret to be rejected');
+            assertEqual('UsageError', caught.name);
+            assert(caught.message.includes('API_SECRET'), 'expected the missing name');
+            assert(caught.message.includes(SOURCE_VERSION_ID), 'expected the source version ID');
+            assert(caught.message.includes('set-secrets -e production'), 'expected the recovery command');
+            assertEqual(0, bundleModules.callCount);
+            assertEqual(0, apiClient.calls.createWorkerVersion.length);
+        }
+    });
+
+    it('accepts a declared secret set outside this tool, ignoring legacy recorded names', async () => {
         const state = JSON.parse(makeBaseState());
         state.secretNames = [];
         const fileSystem = makeFileSystem({ [STATE_FILEPATH]: JSON.stringify(state) });
-        const bundleModules = makeBundler('export default 1;');
-        const apiClient = makeApiClient({});
 
-        const caught = await catchAsyncError(() => {
-            return createWorkerVersion(runOptions({ apiClient, fileSystem, bundleModules }));
+        const result = await createWorkerVersion(runOptions({ fileSystem }));
+
+        assertEqual('created', result.outcome);
+        assertEqual(undefined, JSON.parse(fileSystem.written[STATE_FILEPATH]).secretNames);
+    });
+
+    it('reports secrets on the source version that are not declared', async () => {
+        const apiClient = makeApiClient({
+            getWorkerVersion: async (_workerName, versionId) => ({
+                id: versionId,
+                bindings: [
+                    { type: 'secret_text', name: 'API_SECRET' },
+                    { type: 'secret_key', name: 'ZETA_KEY' },
+                    { type: 'secret_text', name: 'OLD_SECRET' },
+                    { type: 'plain_text', name: 'TRUST_PROXY', text: 'false' },
+                ],
+            }),
         });
 
-        assert(caught, 'expected missing declared secret state to be rejected');
-        assertEqual('UsageError', caught.name);
-        assert(caught.message.includes('API_SECRET'), 'expected the missing name');
+        const result = await createWorkerVersion(runOptions({ apiClient }));
+
+        assertEqual('created', result.outcome);
+        assertEqual('OLD_SECRET,ZETA_KEY', result.undeclaredSecretNames.join(','));
+    });
+
+    it('fails before bundling when Cloudflare returns a source version without bindings', async () => {
+        const bundleModules = makeBundler('export default 1;');
+        const apiClient = makeApiClient({
+            getWorkerVersion: async (_workerName, versionId) => ({ id: versionId }),
+        });
+
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ apiClient, bundleModules }));
+        });
+
+        assert(caught, 'expected a version without bindings to be rejected');
+        assert(caught.message.includes('without a bindings list'), 'expected the missing bindings explanation');
         assertEqual(0, bundleModules.callCount);
         assertEqual(0, apiClient.calls.createWorkerVersion.length);
     });
@@ -243,12 +298,18 @@ describe('create-worker-version', ({ it }) => {
 
     it('changes the binding hash for declaration and inheritance-source changes', async () => {
         const base = await prepareWorkerVersion(runOptions({}));
-        const declarationState = JSON.parse(makeBaseState());
-        declarationState.secretNames.push('SECOND_SECRET');
         const declaration = await prepareWorkerVersion(runOptions({
             fileSystem: makeFileSystem({
                 [DECLARATIONS_FILEPATH]: 'API_SECRET=example\nSECOND_SECRET=example\n',
-                [STATE_FILEPATH]: JSON.stringify(declarationState),
+            }),
+            apiClient: makeApiClient({
+                getWorkerVersion: async (_workerName, versionId) => ({
+                    id: versionId,
+                    bindings: [
+                        { type: 'secret_text', name: 'API_SECRET' },
+                        { type: 'secret_text', name: 'SECOND_SECRET' },
+                    ],
+                }),
             }),
         }));
         const sourceState = JSON.parse(makeBaseState());
@@ -572,7 +633,6 @@ describe('create-worker-version', ({ it }) => {
         assertEqual(false, call.options.deploy);
         assertEqual(true, call.options.strictBindingsInheritance);
         assertEqual(false, state.deployed);
-        assertEqual('API_SECRET', state.secretNames.join(','));
         assertEqual(false, result.deployed);
     });
 
@@ -838,7 +898,6 @@ function makeBaseState() {
         modulesHash: null,
         bindingsHash: null,
         configHash: null,
-        secretNames: [ 'API_SECRET' ],
     });
 }
 
@@ -895,7 +954,7 @@ function makeApiClient(implementations) {
             calls.getWorkerVersion.push({ workerName, versionId });
             return implementations.getWorkerVersion
                 ? implementations.getWorkerVersion(workerName, versionId)
-                : { id: versionId };
+                : { id: versionId, bindings: [ { type: 'secret_text', name: 'API_SECRET' } ] };
         },
         async listWorkerVersions(workerName, options) {
             calls.listWorkerVersions.push({ workerName, options });

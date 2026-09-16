@@ -74,6 +74,7 @@ function makeResult() {
         versionId: 'new-version-id',
         buildId: 'existing-build-id',
         stateFilepath: STATE_FILEPATH,
+        undeclaredSecretNames: [],
     };
 }
 

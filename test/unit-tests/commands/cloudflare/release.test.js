@@ -22,6 +22,20 @@ describe('CloudflareReleaseCommand', ({ it }) => {
         tracker.reset();
     });
 
+    it('warns in Worker preparation about undeclared secrets on the source version', async () => {
+        const tracker = new MockTracker();
+        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const prepared = { ...resourcesResolved(), undeclaredSecretNames: [ 'OLD_SECRET' ] };
+        const command = makeCommand(async () => ({ outcome: 'resources-resolved', prepared }));
+
+        await command.run({ environment: 'production' });
+
+        const text = stdout.mock.getCall(1).arguments[0];
+        tracker.reset();
+        assertMatches('OLD_SECRET', text);
+        assertMatches('do not inherit', text);
+    });
+
     it('requires an environment before constructing clients', async () => {
         const command = makeCommand(async () => resourcesResolved());
         let caught;
@@ -61,5 +75,6 @@ function resourcesResolved() {
         environment: 'production',
         workerName: 'worker',
         resolvedResources: [],
+        undeclaredSecretNames: [],
     };
 }

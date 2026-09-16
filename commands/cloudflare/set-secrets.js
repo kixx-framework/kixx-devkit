@@ -97,13 +97,26 @@ export default class CloudflareSetSecretsCommand {
 }
 
 function renderResult(result) {
-    return [
+    const lines = [
         `Environment: ${ result.environment }`,
         `Worker:      ${ result.workerName }`,
         `Secrets:     ${ result.changedSecretNames.join(', ') }`,
         `Version:     ${ result.versionId } (undeployed)`,
         `BUILD_ID:    ${ result.buildId }`,
         `Wrote ${ result.stateFilepath }`,
-        '',
-    ].join('\n');
+    ];
+
+    // Normal builds inherit only declared names, so these secrets survive only
+    // until the next create-worker-version or release.
+    if (result.undeclaredSecretNames.length > 0) {
+        lines.push(
+            '',
+            `Warning: version ${ result.versionId } has secrets not declared in example.env.secrets: ` +
+            `${ result.undeclaredSecretNames.join(', ') }. ` +
+            'The next create-worker-version or release will not inherit them.',
+        );
+    }
+
+    lines.push('');
+    return lines.join('\n');
 }

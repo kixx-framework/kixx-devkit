@@ -20,6 +20,26 @@ describe('CloudflareSetSecretsCommand', ({ it }) => {
         assert(!output.text.includes('fake-alpha'), 'expected no secret value in output');
     });
 
+    it('warns about remote secrets the declaration file does not declare', async () => {
+        const output = makeOutput();
+        const command = makeCommand({ calls: [], output, undeclaredSecretNames: [ 'OLD_SECRET' ] });
+
+        await command.run({ environment: 'production' });
+
+        assert(output.text.includes('Warning:'), 'expected a warning');
+        assert(output.text.includes('OLD_SECRET'), 'expected the undeclared name');
+        assert(output.text.includes('will not inherit'), 'expected the consequence');
+    });
+
+    it('prints no warning when every remote secret is declared', async () => {
+        const output = makeOutput();
+        const command = makeCommand({ calls: [], output });
+
+        await command.run({ environment: 'production' });
+
+        assert(!output.text.includes('Warning:'), 'expected no warning');
+    });
+
     it('resolves an explicit relative dotenv filepath from the project directory', async () => {
         const calls = [];
         const command = makeCommand({ calls, output: makeOutput() });
@@ -45,7 +65,7 @@ describe('CloudflareSetSecretsCommand', ({ it }) => {
 });
 
 function makeCommand(args) {
-    const { calls, output } = args;
+    const { calls, output, undeclaredSecretNames = [] } = args;
 
     return new CloudflareSetSecretsCommand({
         projectDirectory: '/app',
@@ -66,6 +86,7 @@ function makeCommand(args) {
                 versionId: 'new-version-id',
                 buildId: 'existing-build-id',
                 stateFilepath: '/app/.kixx/cloudflare-state.production.json',
+                undeclaredSecretNames,
             };
         },
     });

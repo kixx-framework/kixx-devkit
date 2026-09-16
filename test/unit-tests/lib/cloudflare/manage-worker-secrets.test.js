@@ -18,11 +18,10 @@ const BASE_STATE = {
     modulesHash: 'modules-hash',
     bindingsHash: 'bindings-hash',
     configHash: 'config-hash',
-    secretNames: [ 'EXISTING' ],
 };
 
 describe('manage-worker-secrets', ({ it }) => {
-    it('sets one declared secret additively and writes name-only state', async () => {
+    it('sets one declared secret additively and writes value-free state', async () => {
         const apiClient = makeApiClient();
         const fileSystem = makeFileSystem();
 
@@ -41,8 +40,9 @@ describe('manage-worker-secrets', ({ it }) => {
 
         const mutation = apiClient.calls.createWorkerSecretVersion[0];
         assertEqual('FAKE_SECRET_VALUE', mutation.operations.API_KEY);
+        assertEqual(0, result.undeclaredSecretNames.length);
         const state = JSON.parse(fileSystem.files[STATE_FILEPATH]);
-        assertEqual('API_KEY,EXISTING', state.secretNames.join(','));
+        assertEqual(undefined, state.secretNames);
         assertEqual('existing-build-id', state.buildId);
         assertEqual('modules-hash', state.modulesHash);
         assertEqual('config-hash', state.configHash);
@@ -52,7 +52,7 @@ describe('manage-worker-secrets', ({ it }) => {
         assert(!JSON.stringify(result).includes('FAKE_SECRET_VALUE'), 'expected no value in result');
     });
 
-    it('bulk sets declared secrets in one mutation with stable state ordering', async () => {
+    it('bulk sets declared secrets in one mutation with sorted changed names', async () => {
         const apiClient = makeApiClient();
         const fileSystem = makeFileSystem({
             declarations: [ 'ZETA=', 'ALPHA=', 'EXISTING=' ].join('\n'),
@@ -66,13 +66,36 @@ describe('manage-worker-secrets', ({ it }) => {
 
         assertEqual(1, apiClient.calls.createWorkerSecretVersion.length);
         assertEqual('ALPHA,EXISTING,ZETA', result.changedSecretNames.join(','));
-        const state = JSON.parse(fileSystem.files[STATE_FILEPATH]);
-        assertEqual('ALPHA,EXISTING,ZETA', state.secretNames.join(','));
     });
 
-    it('deletes only a known secret after its declaration is removed', async () => {
+    it('reports remote secrets the declaration file does not declare', async () => {
+        const apiClient = makeApiClient({
+            async getWorkerVersion(_workerName, versionId) {
+                return {
+                    id: versionId,
+                    bindings: [
+                        { type: 'secret_text', name: 'EXISTING' },
+                        { type: 'secret_text', name: 'OLD_SECRET' },
+                        { type: 'plain_text', name: 'PLAIN_VALUE', text: 'visible' },
+                    ],
+                };
+            },
+        });
+
+        const result = await setWorkerSecrets(runOptions({
+            apiClient,
+            secrets: { API_KEY: 'FAKE_SECRET_VALUE' },
+        }));
+
+        assertEqual('OLD_SECRET', result.undeclaredSecretNames.join(','));
+    });
+
+    it('deletes a secret present on the remote base version after its declaration is removed', async () => {
         const apiClient = makeApiClient();
-        const fileSystem = makeFileSystem({ declarations: 'API_KEY=' });
+        const fileSystem = makeFileSystem({
+            declarations: 'API_KEY=',
+            state: { ...BASE_STATE, secretNames: [] },
+        });
 
         const result = await deleteWorkerSecret(runOptions({
             apiClient,
@@ -83,8 +106,7 @@ describe('manage-worker-secrets', ({ it }) => {
 
         assertEqual('EXISTING', result.changedSecretNames.join(','));
         assertEqual(null, apiClient.calls.createWorkerSecretVersion[0].operations.EXISTING);
-        const state = JSON.parse(fileSystem.files[STATE_FILEPATH]);
-        assertEqual(0, state.secretNames.length);
+        assertEqual(0, result.undeclaredSecretNames.length);
     });
 
     it('rejects missing environment and environment configuration before mutation', async () => {
@@ -129,10 +151,11 @@ describe('manage-worker-secrets', ({ it }) => {
         }
     });
 
-    it('rejects deletion while declared and deletion unknown to state before mutation', async () => {
+    it('rejects deletion while declared and deletion absent from the base version before mutation', async () => {
         const cases = [
             { declarations: 'EXISTING=', message: 'still required' },
-            { declarations: '', name: 'UNKNOWN', message: 'not recorded' },
+            { declarations: '', name: 'UNKNOWN', message: 'not set on Worker version base-version-id' },
+            { declarations: '', name: 'PLAIN_VALUE', message: 'not set on Worker version base-version-id' },
         ];
 
         for (const testCase of cases) {
@@ -253,6 +276,37 @@ describe('manage-worker-secrets', ({ it }) => {
         assertEqual(1, fileSystem.writeCount);
     });
 
+    it('hashes declared inheritance regardless of which secrets the base version holds', async () => {
+        const withSecret = makeFileSystem();
+        const withoutSecret = makeFileSystem();
+
+        await setWorkerSecrets(runOptions({
+            fileSystem: withSecret,
+            secrets: { API_KEY: 'FAKE_SECRET_VALUE' },
+        }));
+        await setWorkerSecrets(runOptions({
+            fileSystem: withoutSecret,
+            secrets: { API_KEY: 'FAKE_SECRET_VALUE' },
+            apiClient: makeApiClient({
+                async getWorkerVersion(_workerName, versionId) {
+                    return {
+                        id: versionId,
+                        bindings: [
+                            { type: 'plain_text', name: 'BUILD_ID', text: 'existing-build-id' },
+                            { type: 'plain_text', name: 'ENVIRONMENT', text: 'production' },
+                            { type: 'plain_text', name: 'PLAIN_VALUE', text: 'visible' },
+                            { type: 'secret_text', name: 'UNDECLARED_SECRET' },
+                        ],
+                    };
+                },
+            }),
+        }));
+
+        const first = JSON.parse(withSecret.files[STATE_FILEPATH]);
+        const second = JSON.parse(withoutSecret.files[STATE_FILEPATH]);
+        assertEqual(first.bindingsHash, second.bindingsHash);
+    });
+
     it('hashes secret names and inheritance provenance without secret values', async () => {
         const firstFileSystem = makeFileSystem();
         const secondFileSystem = makeFileSystem();
@@ -318,6 +372,7 @@ function makeApiClient(overrides) {
                 bindings: [
                     { type: 'plain_text', name: 'BUILD_ID', text: 'existing-build-id' },
                     { type: 'plain_text', name: 'ENVIRONMENT', text: 'production' },
+                    { type: 'plain_text', name: 'PLAIN_VALUE', text: 'visible' },
                     { type: 'secret_text', name: 'EXISTING' },
                 ],
                 exports: {},

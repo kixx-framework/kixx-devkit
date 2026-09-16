@@ -8,7 +8,12 @@ import releaseToCloudflare from '../../lib/release/cloudflare-release.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { renderReleaseResult } from '../app/publish.js';
-import { renderCreated, renderResourcesResolved, renderSkipped } from './create-worker-version.js';
+import {
+    renderCreated,
+    renderResourcesResolved,
+    renderSkipped,
+    renderUndeclaredSecrets,
+} from './create-worker-version.js';
 import { renderDeploymentResult } from './deploy-version.js';
 import { subcommands } from './index.js';
 
@@ -80,6 +85,9 @@ export default class CloudflareReleaseCommand {
 
 async function renderResult(result, context) {
     write('Worker preparation\n------------------\n');
+    if (result.prepared.undeclaredSecretNames.length > 0) {
+        write(renderUndeclaredSecrets(result.prepared.undeclaredSecretNames));
+    }
     if (result.outcome === 'resources-resolved') {
         write(renderResourcesResolved(result.prepared, context.environment));
         write('Content staging and Worker creation were omitted. Traffic was unchanged.\n\n');

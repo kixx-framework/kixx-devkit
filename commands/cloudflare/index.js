@@ -1,6 +1,9 @@
 export const description = 'Tools for working directly with Cloudflare';
 
 export const subcommands = {
+    'recover-secret-version': {
+        description: 'Verify an explicit secret-only Worker version and recover its local state',
+    },
     'create-worker': {
         description: 'Create a new Worker from scratch',
     },

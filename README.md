@@ -20,6 +20,7 @@ Available workflows:
 - `kixx.js cloudflare create-worker-version` — upload an undeployed Worker version.
 - `kixx.js cloudflare set-secret` — create an undeployed version with one secret changed.
 - `kixx.js cloudflare set-secrets` — atomically set additive secrets from dotenv input.
+- `kixx.js cloudflare recover-secret-version` — repair state for a verified secret-only version.
 - `kixx.js cloudflare delete-secret` — create an undeployed version without one secret.
 - `kixx.js cloudflare deploy-version` — route traffic to an existing Worker version.
 - `kixx.js cloudflare release` — stage content and deploy a Worker release.

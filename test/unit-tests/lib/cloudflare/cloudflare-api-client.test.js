@@ -240,23 +240,21 @@ describe('CloudflareAPIClient', ({ it }) => {
 
             if (init.method === 'PATCH') {
                 const payload = JSON.parse(init.body);
-                operationTag = payload.version_tags['workers/tag'];
+                operationTag = payload.annotations['workers/tag'];
 
                 return makeApiResponse({
                     success: true,
-                    result: {
-                        API_KEY: { name: 'API_KEY', type: 'secret_text' },
-                    },
+                    result: { id: 'secret-version-id' },
                 });
             }
 
             return makeApiResponse({
                 success: true,
-                result: [ {
+                result: {
                     id: 'secret-version-id',
-                    created_on: '2026-09-15T12:00:00.000Z',
+                    metadata: { created_on: '2026-09-15T12:00:00.000Z' },
                     annotations: { 'workers/tag': operationTag },
-                } ],
+                },
             });
         };
         const client = makeClient(fetchMock);
@@ -275,24 +273,25 @@ describe('CloudflareAPIClient', ({ it }) => {
         const mutation = calls[0];
         const payload = JSON.parse(mutation.init.body);
         assertEqual(
-            'https://api.cloudflare.com/client/v4/accounts/account-id/workers/scripts/example-worker/secrets-bulk',
+            'https://api.cloudflare.com/client/v4/accounts/account-id/workers/workers/example-worker/versions/latest',
             mutation.url.href,
         );
         assertEqual('PATCH', mutation.init.method);
         assertEqual('application/merge-patch+json', mutation.init.headers['content-type']);
-        assertEqual('secret_text', payload.secrets.API_KEY.type);
-        assertEqual('API_KEY', payload.secrets.API_KEY.name);
-        assertEqual('FAKE_SECRET_VALUE', payload.secrets.API_KEY.text);
-        assertEqual(null, payload.secrets.OLD_SECRET);
-        assertMatches(/^kixx-secret-[0-9a-f-]+$/, payload.version_tags['workers/tag']);
+        assertEqual('secret_text', payload.env.API_KEY.type);
+        assertEqual(undefined, payload.env.API_KEY.name);
+        assertEqual('FAKE_SECRET_VALUE', payload.env.API_KEY.text);
+        assertEqual(null, payload.env.OLD_SECRET);
+        assertMatches(/^config-change-[0-9a-f-]+$/, payload.annotations['workers/tag']);
         assertEqual(
             'kixx.js cloudflare set-secrets',
-            payload.version_tags['workers/triggered_by'],
+            payload.annotations['workers/triggered_by'],
         );
 
         const lookup = calls[1];
         assertEqual('GET', lookup.init.method);
-        assertEqual('/client/v4/accounts/account-id/workers/workers/example-worker/versions', lookup.url.pathname);
+        assertEqual('/client/v4/accounts/account-id/workers/workers/example-worker/versions/secret-version-id', lookup.url.pathname);
+        assertMatches('set-secrets', payload.annotations['workers/message']);
         assertEqual(null, lookup.url.searchParams.get('deploy'));
         assert(!calls.some((call) => call.url.pathname.endsWith('/deployments')), 'expected no deployment request');
     });
@@ -323,41 +322,36 @@ describe('CloudflareAPIClient', ({ it }) => {
         assertEqual(0, callCount);
     });
 
-    it('rejects zero or multiple correlated versions instead of selecting latest', async () => {
-        for (const matchCount of [ 0, 2 ]) {
-            let operationTag;
-            const client = makeClient(async (_url, init) => {
-                if (init.method === 'PATCH') {
-                    operationTag = JSON.parse(init.body).version_tags['workers/tag'];
-                    return makeApiResponse({ success: true, result: {} });
-                }
+    it('reports an accepted mutation without a returned version ID', async () => {
+        const calls = [];
+        const client = makeClient(async (url, init) => {
+            calls.push({ url, init });
+            return makeApiResponse({ success: true, result: {} });
+        });
+        const caught = await catchAsyncError(() => client.createWorkerSecretVersion(
+            'example-worker', { API_KEY: 'FAKE_SECRET_VALUE' }, { command: 'set-secrets' },
+        ));
+        assertEqual('CloudflareApiError', caught.name);
+        assertMatches('accepted the secret mutation', caught.message);
+        assertMatches('config-change-', caught.message);
+        assertEqual(1, calls.length);
+    });
 
-                const versions = Array.from({ length: matchCount }, (_value, index) => ({
-                    id: `version-${ index }`,
-                    created_on: '2026-09-15T12:00:00.000Z',
-                    annotations: { 'workers/tag': operationTag },
-                }));
-                versions.push({
-                    id: 'newest-unrelated-version',
-                    created_on: '2026-09-15T12:01:00.000Z',
-                    annotations: { 'workers/tag': 'other-operation' },
-                });
-
-                return makeApiResponse({ success: true, result: versions });
-            });
-
-            const caught = await catchAsyncError(() => {
-                return client.createWorkerSecretVersion(
-                    'example-worker',
-                    { API_KEY: 'FAKE_SECRET_VALUE' },
-                    { command: 'set-secret' },
-                );
-            });
-
-            assertEqual('CloudflareApiError', caught.name);
-            assertMatches(`found ${ matchCount }`, caught.message);
-            assert(!caught.message.includes('newest-unrelated-version'), 'expected no latest-version fallback');
-        }
+    it('preserves the created version ID when its metadata read fails', async () => {
+        let mutationCount = 0;
+        const client = makeClient(async (_url, init) => {
+            if (init.method === 'PATCH') {
+                mutationCount += 1;
+                return makeApiResponse({ success: true, result: { id: 'created-version' } });
+            }
+            throw new Error('metadata unavailable');
+        });
+        const caught = await catchAsyncError(() => client.createWorkerSecretVersion(
+            'example-worker', { API_KEY: 'FAKE_SECRET_VALUE' }, { command: 'set-secrets' },
+        ));
+        assertMatches('created-version', caught.message);
+        assertMatches('recover-secret-version', caught.message);
+        assertEqual(1, mutationCount);
     });
 
     it('redacts submitted secret values from Cloudflare errors', async () => {

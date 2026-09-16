@@ -2,6 +2,7 @@ import { describe } from 'kixx-test';
 import { assert, assertEqual } from 'kixx-assert';
 import {
     deleteWorkerSecret,
+    recoverSecretVersion,
     setWorkerSecrets,
 } from '../../../../lib/cloudflare/manage-worker-secrets.js';
 
@@ -21,6 +22,80 @@ const BASE_STATE = {
 };
 
 describe('manage-worker-secrets', ({ it }) => {
+    it('recovers an explicit untagged secret-only version without a remote mutation', async () => {
+        const fileSystem = makeFileSystem();
+        const apiClient = recoveryApiClient();
+        const result = await recoverSecretVersion(runOptions({
+            apiClient, fileSystem, versionId: 'recovered-version',
+        }));
+        const state = JSON.parse(fileSystem.files[STATE_FILEPATH]);
+        assertEqual('recovered-version', state.versionId);
+        assertEqual(BASE_STATE.buildId, state.buildId);
+        assertEqual(BASE_STATE.modulesHash, state.modulesHash);
+        assertEqual(BASE_STATE.configHash, state.configHash);
+        assertEqual(false, state.deployed);
+        assertEqual(STATE_FILEPATH, result.stateFilepath);
+        assertEqual(0, apiClient.calls.createWorkerSecretVersion.length);
+        assertEqual(1, fileSystem.writeCount);
+    });
+
+    it('refuses recovery when identity, code, runtime, bindings, or declared secrets cannot be verified', async () => {
+        const changes = [
+            (version) => {
+                version.resources.script.etag = 'different';
+            },
+            (version) => {
+                delete version.resources.script.etag;
+            },
+            (version) => {
+                version.resources.script_runtime.compatibility_date = '2026-09-16';
+            },
+            (version) => {
+                version.resources.bindings[0].text = 'different-build';
+            },
+            (version) => {
+                version.resources.bindings[1].text = 'different-value';
+            },
+            (version) => {
+                version.resources.bindings.pop();
+            },
+            (version) => {
+                delete version.metadata.created_on;
+            },
+        ];
+        for (const change of changes) {
+            const fileSystem = makeFileSystem();
+            const caught = await catchAsyncError(() => recoverSecretVersion(runOptions({
+                apiClient: recoveryApiClient(change), fileSystem, versionId: 'recovered-version',
+            })));
+            assertEqual('UsageError', caught.name);
+            assertEqual(0, fileSystem.writeCount);
+        }
+    });
+
+    it('refuses recovery of a version that is no longer latest', async () => {
+        const fileSystem = makeFileSystem();
+        const apiClient = recoveryApiClient();
+        apiClient.listWorkerVersions = async () => [ { id: 'other-version' } ];
+        const caught = await catchAsyncError(() => recoverSecretVersion(runOptions({
+            apiClient, fileSystem, versionId: 'recovered-version',
+        })));
+        assertEqual('UsageError', caught.name);
+        assertEqual(0, fileSystem.writeCount);
+    });
+
+    it('requires an explicit recovery ID and an existing valid state record', async () => {
+        for (const options of [ { versionId: 'latest' }, { versionId: '' },
+            { versionId: 'recovered-version', state: null } ]) {
+            const fileSystem = makeFileSystem({ state: options.state === null ? null : BASE_STATE });
+            const caught = await catchAsyncError(() => recoverSecretVersion(runOptions({
+                ...options, apiClient: recoveryApiClient(), fileSystem,
+            })));
+            assertEqual('UsageError', caught.name);
+            assertEqual(0, fileSystem.writeCount);
+        }
+    });
+
     it('sets one declared secret additively and writes value-free state', async () => {
         const apiClient = makeApiClient();
         const fileSystem = makeFileSystem();
@@ -438,4 +513,32 @@ async function catchAsyncError(fn) {
         return error;
     }
     return null;
+}
+
+function recoveryApiClient(change) {
+    return makeApiClient({
+        async listWorkerVersions() {
+            return [ { id: 'recovered-version' } ];
+        },
+        async getWorkerVersion(_workerName, versionId) {
+            const version = {
+                id: versionId,
+                metadata: { created_on: '2026-09-15T12:00:00.000Z' },
+                resources: {
+                    script: { etag: 'same-code', handlers: [ 'fetch' ] },
+                    script_runtime: { compatibility_date: '2026-08-01' },
+                    bindings: [
+                        { type: 'plain_text', name: 'BUILD_ID', text: BASE_STATE.buildId },
+                        { type: 'plain_text', name: 'ENVIRONMENT', text: 'production' },
+                        { type: 'secret_text', name: 'EXISTING' },
+                        { type: 'secret_text', name: 'API_KEY' },
+                    ],
+                },
+            };
+            if (change && versionId === 'recovered-version') {
+                change(version);
+            }
+            return version;
+        },
+    });
 }

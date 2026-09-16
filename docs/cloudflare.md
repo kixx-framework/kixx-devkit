@@ -343,6 +343,12 @@ undeployed version, update `.kixx/cloudflare-state.<environment>.json` after
 Cloudflare succeeds, and never change traffic. Promote the result separately
 with `deploy-version` or create a later normal version that inherits it.
 
+Secret versions carry a `config-change-<unique ID>` tag and a
+`workers/message` naming the invoking command. The application `BUILD_ID`
+binding is preserved. The version PATCH endpoint returns the created version
+ID directly; the command reads its creation timestamp and then records state.
+If the metadata read fails, the error preserves the created ID for recovery.
+
 Every set name must be an active assignment in `example.env.secrets`.
 `BUILD_ID` and `ENVIRONMENT` are reserved. The commands verify that the state
 file names the configured Worker and exact latest remote version before making
@@ -415,13 +421,43 @@ If local state is missing, recover the complete
 checkout that created Cloudflare's latest version. Confirm its `workerName`
 and `versionId` against Cloudflare before retrying. If Cloudflare reports a
 newer version, recover the state produced by that exact operation. There is no
-automatic adoption command because hashes and `BUILD_ID` cannot be
-reconstructed safely from an uncorrelated latest version.
+automatic adoption of an arbitrary latest version because hashes and
+`BUILD_ID` cannot be reconstructed safely from it. For a verified secret-only
+change with an existing prior state record, use `recover-secret-version` below.
 
 If Cloudflare creates a secret version but the local state write fails, the
 error prints that remote version ID. Preserve it and repair the state from the
 prior record plus the reported ID before another operation; otherwise the
 optimistic-concurrency check will correctly reject the stale file.
+
+## `recover-secret-version`
+
+Repairs local state after a secret mutation succeeded remotely but the command
+failed before recording the created version. It requires the complete prior
+state record and an explicit version ID:
+
+```sh
+kixx.js cloudflare recover-secret-version -e production <version-id>
+kixx.js cloudflare release -e production
+```
+
+The supplied version must be Cloudflare's latest created version. Recovery
+reads both it and the previously recorded version, then requires identical
+script etags, script and runtime settings, other resource settings, non-secret
+bindings, exports, and cache options. Its `BUILD_ID` must match local state,
+and every actively declared secret must exist. Missing verification data or a
+mismatch stops without writing state. Secret values cannot be read back or
+verified; confirm that the version belongs to your intended secret operation.
+
+Recovery preserves module and configuration hashes and recalculates inherited
+binding provenance for the supplied version. It changes no remote versions,
+annotations, secrets, content pointers, or traffic. It records a newly recovered
+version as `deployed: false` rather than inferring deployment status. The
+existing untagged version remains untagged.
+
+If code or runtime verification fails, recover the complete state from the
+operation that created that version instead. This command cannot recover an
+arbitrary code release or bootstrap missing prior state.
 
 ## `deploy-version`
 

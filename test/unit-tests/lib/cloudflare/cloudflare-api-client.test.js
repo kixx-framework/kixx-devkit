@@ -232,6 +232,16 @@ describe('CloudflareAPIClient', ({ it }) => {
         assertMatches('options.strictBindingsInheritance must be a boolean', caught.message);
     });
 
+    it('requests module contents explicitly when inspecting a version for recovery', async () => {
+        let receivedUrl;
+        const client = makeClient(async (url) => {
+            receivedUrl = url;
+            return makeApiResponse({ success: true, result: { id: 'version' } });
+        });
+        await client.getWorkerVersion('example-worker', 'version', { include: 'modules' });
+        assertEqual('modules', receivedUrl.searchParams.get('include'));
+    });
+
     it('creates one undeployed version for an atomic additive and delete secret patch', async () => {
         let operationTag;
         const calls = [];

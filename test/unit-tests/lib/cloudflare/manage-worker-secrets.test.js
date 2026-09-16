@@ -22,6 +22,52 @@ const BASE_STATE = {
 };
 
 describe('manage-worker-secrets', ({ it }) => {
+    it('recovers the modern version format by requesting and comparing module contents', async () => {
+        const fileSystem = makeFileSystem();
+        const apiClient = modernRecoveryApiClient();
+        const result = await recoverSecretVersion(runOptions({
+            apiClient, fileSystem, versionId: 'recovered-version',
+        }));
+        assertEqual('recovered-version', result.versionId);
+        assertEqual(1, fileSystem.writeCount);
+        assertEqual('modules', apiClient.calls.getWorkerVersion[0].options.include);
+        assertEqual('modules', apiClient.calls.getWorkerVersion[1].options.include);
+    });
+
+    it('rejects modern versions with missing or changed modules or changed runtime settings', async () => {
+        const changes = [
+            (version) => {
+                delete version.modules;
+            },
+            (version) => {
+                version.modules = [];
+            },
+            (version) => {
+                version.modules[0].content_base64 = 'Y2hhbmdlZA==';
+            },
+            (version) => {
+                delete version.modules[0].content_base64;
+            },
+            (version) => {
+                version.modules.push({ ...version.modules[0] });
+            },
+            (version) => {
+                version.compatibility_date = '2026-09-16';
+            },
+            (version) => {
+                version.main_module = 'different.js';
+            },
+        ];
+        for (const change of changes) {
+            const fileSystem = makeFileSystem();
+            const caught = await catchAsyncError(() => recoverSecretVersion(runOptions({
+                apiClient: modernRecoveryApiClient(change), fileSystem, versionId: 'recovered-version',
+            })));
+            assertEqual('UsageError', caught.name);
+            assertEqual(0, fileSystem.writeCount);
+        }
+    });
+
     it('recovers an explicit untagged secret-only version without a remote mutation', async () => {
         const fileSystem = makeFileSystem();
         const apiClient = recoveryApiClient();
@@ -81,6 +127,19 @@ describe('manage-worker-secrets', ({ it }) => {
             apiClient, fileSystem, versionId: 'recovered-version',
         })));
         assertEqual('UsageError', caught.name);
+        assertEqual(0, fileSystem.writeCount);
+    });
+
+    it('identifies a differing script field without exposing its values', async () => {
+        const fileSystem = makeFileSystem();
+        const apiClient = recoveryApiClient((version) => {
+            version.resources.script.last_deployed_from = 'private-provenance';
+        });
+        const caught = await catchAsyncError(() => recoverSecretVersion(runOptions({
+            apiClient, fileSystem, versionId: 'recovered-version',
+        })));
+        assert(caught.message.includes('resources.script.last_deployed_from'));
+        assert(!caught.message.includes('private-provenance'));
         assertEqual(0, fileSystem.writeCount);
     });
 
@@ -437,8 +496,8 @@ function makeApiClient(overrides) {
 
     return {
         calls,
-        async getWorkerVersion(workerName, versionId) {
-            calls.getWorkerVersion.push({ workerName, versionId });
+        async getWorkerVersion(workerName, versionId, options) {
+            calls.getWorkerVersion.push({ workerName, versionId, options });
             if (implementations.getWorkerVersion) {
                 return await implementations.getWorkerVersion(workerName, versionId);
             }
@@ -471,6 +530,29 @@ function makeApiClient(overrides) {
             };
         },
     };
+}
+
+function modernRecoveryApiClient(change) {
+    const client = recoveryApiClient();
+    const getVersion = client.getWorkerVersion.bind(client);
+    client.getWorkerVersion = async (workerName, versionId, options) => {
+        const legacy = await getVersion(workerName, versionId, options);
+        const version = {
+            id: versionId,
+            number: versionId === 'recovered-version' ? 2 : 1,
+            created_on: legacy.metadata.created_on,
+            source: versionId === 'recovered-version' ? 'api' : 'upload',
+            bindings: legacy.resources.bindings,
+            compatibility_date: legacy.resources.script_runtime.compatibility_date,
+            main_module: 'worker.js',
+            modules: [ { name: 'worker.js', content_type: 'application/javascript+module', content_base64: 'Y29kZQ==' } ],
+        };
+        if (change && versionId === 'recovered-version') {
+            change(version);
+        }
+        return version;
+    };
+    return client;
 }
 
 function makeFileSystem(options) {

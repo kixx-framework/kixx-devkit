@@ -442,9 +442,11 @@ kixx.js cloudflare release -e production
 ```
 
 The supplied version must be Cloudflare's latest created version. Recovery
-reads both it and the previously recorded version, then requires identical
-script etags, script and runtime settings, other resource settings, non-secret
-bindings, exports, and cache options. Its `BUILD_ID` must match local state,
+reads both it and the previously recorded version with `include=modules`.
+For the modern API format, it requires identical module names, content types,
+and contents, plus matching runtime and other configuration. For the legacy
+format, it verifies script etags and resource settings. Both formats require
+matching non-secret bindings, exports, and cache options. Its `BUILD_ID` must match local state,
 and every actively declared secret must exist. Missing verification data or a
 mismatch stops without writing state. Secret values cannot be read back or
 verified; confirm that the version belongs to your intended secret operation.

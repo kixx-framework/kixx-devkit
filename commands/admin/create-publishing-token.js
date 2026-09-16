@@ -3,6 +3,7 @@ import { isUndefined } from 'kixx-assert';
 
 import resolveAdminEnvironment from '../../lib/admin/resolve-admin-environment.js';
 import { promptForValue } from '../../lib/prompt.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import { subcommands } from './index.js';
 
 export default class AdminCreatePublishingTokenCommand {
@@ -51,7 +52,7 @@ export default class AdminCreatePublishingTokenCommand {
             description: options?.description,
         });
 
-        process.stdout.write(renderToken(token, connection.environment));
+        process.stdout.write(wrapText(renderToken(token, connection.environment)));
         return 0;
     }
 }

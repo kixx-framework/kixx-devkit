@@ -158,11 +158,14 @@ async run(options, ...positionals) {}
 an integer to set the process exit code — `0` for success. A non-integer return
 leaves the exit code alone, which also means success.
 
-Write results to `process.stdout`. Throw `UsageError` (from
-`lib/usage-error.js`) for anything the user can fix by changing arguments or
-settings: the runner prints its message alone, with no stack trace. Any other
-error prints `Failed to run command:` followed by the full error, which is what
-you want for a genuine defect. Both exit with code `1`.
+Write results to `process.stdout`. Pass human-readable text through
+`wrapText()` from `lib/text-wrap.js` so it wraps at 80 columns; write
+machine-readable output, such as JSON or a bare token, unwrapped. Throw
+`UsageError` (from `lib/usage-error.js`) for anything the user can fix by
+changing arguments or settings: the runner prints its message alone, wrapped,
+with no stack trace. Any other error prints `Failed to run command:` followed
+by the full error, which is what you want for a genuine defect. Both exit with
+code `1`.
 
 
 Adding a New Command

@@ -3,6 +3,7 @@ import { isNonEmptyString } from 'kixx-assert';
 
 import assignRelease from '../../lib/publishing/assign-release.js';
 import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { subcommands } from './index.js';
 
@@ -44,14 +45,14 @@ export default class AppAssignBuildCommand {
             reason: options?.reason ?? 'publish',
         });
 
-        process.stdout.write([
+        process.stdout.write(wrapText([
             `Environment: ${ connection.environment }`,
             `Origin:      ${ connection.origin }`,
             `BUILD_ID:    ${ result.buildId }`,
             `Release:     ${ result.releaseId }`,
             `Reason:      ${ options?.reason ?? 'publish' }`,
             '',
-        ].join('\n'));
+        ].join('\n')));
         return 0;
     }
 }

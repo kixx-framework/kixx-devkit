@@ -8,6 +8,7 @@ import {
     MigrationConcurrencyError,
 } from '../../lib/admin/admin-api-error.js';
 import { promptForValue, promptForConfirmation } from '../../lib/prompt.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { subcommands } from './index.js';
 
@@ -82,12 +83,12 @@ export default class AdminRunMigrationCommand {
         if (!dryRun) {
             // Guards against a stale --environment value carried over from a
             // previous command, before issuing a request that mutates ledger state.
-            process.stdout.write(`Running on ${ connection.environment } (${ connection.origin })\n`);
+            process.stdout.write(wrapText(`Running on ${ connection.environment } (${ connection.origin })\n`));
         }
 
         const result = await runBatch(connection.client, migrationId, { dryRun, force, cursor });
 
-        process.stdout.write(renderResult(migrationId, connection.environment, result));
+        process.stdout.write(wrapText(renderResult(migrationId, connection.environment, result)));
         return 0;
     }
 }

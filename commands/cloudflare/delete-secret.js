@@ -2,6 +2,7 @@ import process from 'node:process';
 import CloudflareApiClient from '../../lib/cloudflare/cloudflare-api-client.js';
 import { deleteWorkerSecret } from '../../lib/cloudflare/manage-worker-secrets.js';
 import defaultFileSystem from '../../lib/file-system.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { subcommands } from './index.js';
 
@@ -81,7 +82,7 @@ export default class CloudflareDeleteSecretCommand {
             fileSystem: this.#fileSystem,
         });
 
-        this.#output.write(renderResult(result));
+        this.#output.write(wrapText(renderResult(result)));
         return 0;
     }
 }

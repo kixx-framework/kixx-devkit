@@ -3,6 +3,7 @@ import process from 'node:process';
 import resolveAdminEnvironment from '../../lib/admin/resolve-admin-environment.js';
 import { InvalidInviteError } from '../../lib/admin/admin-api-error.js';
 import { promptForValue, promptForValueTwice } from '../../lib/prompt.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { subcommands } from './index.js';
 
@@ -56,10 +57,10 @@ export default class AdminAcceptInviteCommand {
 
         const account = await acceptInvite(connection.client, inviteToken, { emailAddress, password });
 
-        process.stdout.write(
+        process.stdout.write(wrapText(
             `Created admin account ${ account.adminUserId } <${ account.emailAddress }> `
             + `at ${ account.userCreationDate }\n`,
-        );
+        ));
         return 0;
     }
 }

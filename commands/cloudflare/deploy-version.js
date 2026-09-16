@@ -2,6 +2,7 @@ import process from 'node:process';
 import CloudflareApiClient from '../../lib/cloudflare/cloudflare-api-client.js';
 import PublishingAPIClient from '../../lib/publishing/publishing-api-client.js';
 import deployCloudflareVersion from '../../lib/release/deploy-cloudflare-version.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { subcommands } from './index.js';
 
@@ -93,7 +94,7 @@ export default class CloudflareDeployVersionCommand {
             fileSystem: this.#fileSystem,
         });
 
-        process.stdout.write(renderDeploymentResult(result));
+        process.stdout.write(wrapText(renderDeploymentResult(result)));
 
         return 0;
     }

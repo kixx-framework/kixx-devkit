@@ -2,6 +2,7 @@ import process from 'node:process';
 
 import resolveAdminEnvironment from '../../lib/admin/resolve-admin-environment.js';
 import { promptForValue } from '../../lib/prompt.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import { subcommands } from './index.js';
 
 export default class AdminListMigrationsCommand {
@@ -41,7 +42,7 @@ export default class AdminListMigrationsCommand {
 
         const migrations = await connection.client.listMigrations();
 
-        process.stdout.write(renderMigrations(migrations));
+        process.stdout.write(wrapText(renderMigrations(migrations)));
         return 0;
     }
 }

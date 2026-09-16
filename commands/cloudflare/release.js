@@ -5,6 +5,7 @@ import { readWorkerVersionState } from '../../lib/cloudflare/worker-version-stat
 import defaultFileSystem from '../../lib/file-system.js';
 import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';
 import releaseToCloudflare from '../../lib/release/cloudflare-release.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { renderReleaseResult } from '../app/publish.js';
 import { renderCreated, renderResourcesResolved, renderSkipped } from './create-worker-version.js';
@@ -78,20 +79,20 @@ export default class CloudflareReleaseCommand {
 }
 
 async function renderResult(result, context) {
-    process.stdout.write('Worker preparation\n------------------\n');
+    write('Worker preparation\n------------------\n');
     if (result.outcome === 'resources-resolved') {
-        process.stdout.write(renderResourcesResolved(result.prepared, context.environment));
-        process.stdout.write('Content staging and Worker creation were omitted. Traffic was unchanged.\n\n');
+        write(renderResourcesResolved(result.prepared, context.environment));
+        write('Content staging and Worker creation were omitted. Traffic was unchanged.\n\n');
         return;
     }
     if (result.prepared.outcome === 'skipped') {
-        process.stdout.write(renderSkipped(result.prepared, context.previousState));
+        write(renderSkipped(result.prepared, context.previousState));
     } else {
-        process.stdout.write(`Prepared ${ result.prepared.moduleCount } modules for BUILD_ID ${ result.buildId }.\n\n`);
+        write(`Prepared ${ result.prepared.moduleCount } modules for BUILD_ID ${ result.buildId }.\n\n`);
     }
 
-    process.stdout.write('Content staging\n---------------\n');
-    process.stdout.write(renderReleaseResult({
+    write('Content staging\n---------------\n');
+    write(renderReleaseResult({
         result: result.release,
         environment: context.environment,
         origin: context.origin,
@@ -100,8 +101,8 @@ async function renderResult(result, context) {
     }));
 
     if (result.outcome === 'content-only') {
-        process.stdout.write('Worker creation\n---------------\nOmitted because Worker inputs were unchanged.\n\n');
-        process.stdout.write('Deployment\n----------\nNo deployment happened; the running build pointer was updated.\n\n');
+        write('Worker creation\n---------------\nOmitted because Worker inputs were unchanged.\n\n');
+        write('Deployment\n----------\nNo deployment happened; the running build pointer was updated.\n\n');
         return;
     }
 
@@ -110,18 +111,22 @@ async function renderResult(result, context) {
         environment: context.environment,
         fileSystem: context.fileSystem,
     });
-    process.stdout.write('Worker creation\n---------------\n');
-    process.stdout.write(renderCreated(
+    write('Worker creation\n---------------\n');
+    write(renderCreated(
         result.created,
         context.previousState,
         state,
         path.relative(context.projectDirectory, result.created.stateFilepath),
         { deploymentPending: !result.created.deployed },
     ));
-    process.stdout.write('Deployment\n----------\n');
+    write('Deployment\n----------\n');
     if (result.deployment) {
-        process.stdout.write(renderDeploymentResult(result.deployment));
+        write(renderDeploymentResult(result.deployment));
     } else {
-        process.stdout.write('Deployment occurred during creation after content staging was verified.\n\n');
+        write('Deployment occurred during creation after content staging was verified.\n\n');
     }
+}
+
+function write(text) {
+    process.stdout.write(wrapText(text));
 }

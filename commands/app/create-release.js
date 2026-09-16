@@ -1,6 +1,7 @@
 import process from 'node:process';
 
 import createApplicationRelease from '../../lib/publishing/create-application-release.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import { renderReleaseResult } from './publish.js';
 import { subcommands } from './index.js';
 
@@ -38,7 +39,7 @@ export default class AppCreateReleaseCommand {
             provenance,
         });
 
-        process.stdout.write(renderReleaseResult({ result, verbose: options?.verbose ?? false }));
+        process.stdout.write(wrapText(renderReleaseResult({ result, verbose: options?.verbose ?? false })));
         return 0;
     }
 }

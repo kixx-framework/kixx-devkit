@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import CommandRegistry from './lib/command-registry.js';
 import UsageError from './lib/usage-error.js';
+import { CONSOLE_LINE_WIDTH, wrapText, wrapWords } from './lib/text-wrap.js';
 import {
     CLOUDFLARE_CONFIG_FILE_NAME,
     loadCloudflareConfig,
@@ -18,55 +19,20 @@ import {
 } from './lib/config-loader.js';
 
 
-const HELP_LINE_WIDTH = 80;
-
-
-function wrapText(text, lineWidth) {
-    const normalizedText = text.trim().replace(/\s+/g, ' ');
-    if (!normalizedText) {
-        return [];
-    }
-
-    const lines = [];
-    const words = normalizedText.split(' ');
-    let line = '';
-
-    for (const word of words) {
-        if (line && line.length + word.length + 1 <= lineWidth) {
-            line += ` ${ word }`;
-            continue;
-        }
-
-        if (line) {
-            lines.push(line);
-        }
-
-        let remainingWord = word;
-        while (remainingWord.length > lineWidth) {
-            lines.push(remainingWord.slice(0, lineWidth));
-            remainingWord = remainingWord.slice(lineWidth);
-        }
-        line = remainingWord;
-    }
-
-    if (line) {
-        lines.push(line);
-    }
-
-    return lines;
-}
-
 function appendWrappedDescription(lines, description, initialPrefix) {
     let prefix = initialPrefix;
 
     // Keep space available for description text when an unusually long label
     // would otherwise consume the entire line width.
-    if (prefix.length >= HELP_LINE_WIDTH) {
+    if (prefix.length >= CONSOLE_LINE_WIDTH) {
         lines.push(prefix.trimEnd());
         prefix = '    ';
     }
 
-    const descriptionLines = wrapText(description, HELP_LINE_WIDTH - prefix.length);
+    // Descriptions are often indented template literals, so their line breaks
+    // and indentation are source formatting rather than intended layout.
+    const normalizedDescription = description.trim().replace(/\s+/g, ' ');
+    const descriptionLines = wrapWords(normalizedDescription, CONSOLE_LINE_WIDTH - prefix.length);
 
     if (descriptionLines.length === 0) {
         lines.push(prefix.trimEnd());
@@ -150,7 +116,7 @@ function renderHelp(sections) {
         lines.push('Options:');
 
         for (const [ flagName, opt ] of Object.entries(opts)) {
-            lines.push(`  --${ flagName }  ${ opt.type }  ${ opt.description || '' }`);
+            appendWrappedDescription(lines, opt.description || '', `  --${ flagName }  ${ opt.type }  `);
         }
     }
 
@@ -410,7 +376,7 @@ main()
     .catch((error) => {
         if (error.name === 'UsageError') {
             // eslint-disable-next-line no-console
-            console.error(error.message);
+            console.error(wrapText(error.message));
         } else {
             // eslint-disable-next-line no-console
             console.error('Failed to run command:');

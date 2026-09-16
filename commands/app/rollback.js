@@ -3,6 +3,7 @@ import { isNonEmptyString } from 'kixx-assert';
 
 import assignRelease from '../../lib/publishing/assign-release.js';
 import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { subcommands } from './index.js';
 
@@ -43,7 +44,7 @@ export default class AppRollbackCommand {
         if (isList) {
             const releases = await connection.client.listReleases({ limit: 25 });
             const activations = await connection.client.getBuildActivations(buildId, { limit: 25 });
-            process.stdout.write(renderHistory({ buildId, releases, activations }));
+            process.stdout.write(wrapText(renderHistory({ buildId, releases, activations })));
             return 0;
         }
 
@@ -54,7 +55,7 @@ export default class AppRollbackCommand {
             reason: 'rollback',
         });
         process.stdout.write(
-            `Rolled back build ${ result.buildId } to Release ${ result.releaseId }.\n`,
+            wrapText(`Rolled back build ${ result.buildId } to Release ${ result.releaseId }.\n`),
         );
         return 0;
     }

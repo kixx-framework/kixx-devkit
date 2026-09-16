@@ -6,6 +6,7 @@ import publishContent from '../../lib/publishing/publish-content.js';
 import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';
 import resolveRunningBuild from '../../lib/publishing/resolve-running-build.js';
 import scanContentSources from '../../lib/publishing/scan-content-sources.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import { subcommands } from './index.js';
 
 /**
@@ -112,12 +113,12 @@ export default class AppPublishCommand {
             }
         }
 
-        process.stdout.write(renderPublishResult({
+        process.stdout.write(wrapText(renderPublishResult({
             result: { ...result, buildId },
             environment: connection.environment,
             origin: connection.origin,
             verbose: options?.verbose ?? false,
-        }));
+        })));
         return 0;
     }
 }

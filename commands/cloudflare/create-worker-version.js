@@ -4,6 +4,7 @@ import CloudflareApiClient from '../../lib/cloudflare/cloudflare-api-client.js';
 import { createWorkerVersion } from '../../lib/cloudflare/create-worker-version.js';
 import { readWorkerVersionState } from '../../lib/cloudflare/worker-version-state.js';
 import defaultFileSystem from '../../lib/file-system.js';
+import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { subcommands } from './index.js';
 
@@ -67,13 +68,13 @@ export default class CloudflareCreateWorkerVersionCommand {
         });
 
         if (result.outcome === 'resources-resolved') {
-            process.stdout.write(renderResourcesResolved(result, environment));
+            process.stdout.write(wrapText(renderResourcesResolved(result, environment)));
         } else if (result.outcome === 'skipped') {
-            process.stdout.write(renderSkipped(result, previousState));
+            process.stdout.write(wrapText(renderSkipped(result, previousState)));
         } else {
             const newState = await readWorkerVersionState({ projectDirectory, environment, fileSystem });
             const relativeStateFilepath = path.relative(projectDirectory, result.stateFilepath);
-            process.stdout.write(renderCreated(result, previousState, newState, relativeStateFilepath));
+            process.stdout.write(wrapText(renderCreated(result, previousState, newState, relativeStateFilepath)));
         }
 
         return 0;

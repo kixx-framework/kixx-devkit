@@ -1,4 +1,4 @@
-import { assertEqual, assertMatches } from 'kixx-assert';
+import { assertEqual, assertMatches, assertUndefined } from 'kixx-assert';
 import { describe, MockTracker } from 'kixx-test';
 
 import assignRelease, {
@@ -30,17 +30,16 @@ describe('assignRelease()', ({ it }) => {
         const call = client.assignBuild.mock.getCall(0);
         assertEqual('new-build', call.arguments[0]);
         assertEqual('release-id', call.arguments[1]);
-        assertEqual('*', call.arguments[2].ifNoneMatch);
+        assertEqual(true, call.arguments[2].expectUnassigned);
         assertEqual('carry-forward', call.arguments[2].reason);
         tracker.reset();
     });
 
-    it('uses the current ETag when the build is assigned', async () => {
+    it('uses the current release id when the build is assigned', async () => {
         const tracker = new MockTracker();
         const client = makeClient(tracker, {
             buildId: 'production',
             releaseId: 'old-release',
-            etag: '"old-release"',
         });
 
         await assignRelease({
@@ -53,9 +52,31 @@ describe('assignRelease()', ({ it }) => {
         const call = client.assignBuild.mock.getCall(0);
         assertEqual('production', call.arguments[0]);
         assertEqual('new-release', call.arguments[1]);
-        assertEqual('"old-release"', call.arguments[2].ifMatch);
+        assertEqual('old-release', call.arguments[2].expectedReleaseId);
+        assertUndefined(call.arguments[2].expectUnassigned);
         assertEqual('rollback', call.arguments[2].reason);
         tracker.reset();
+    });
+
+    it('ignores a weak or missing ETag header on the build read', async () => {
+        for (const etag of [ 'W/"old-release"', null, undefined ]) {
+            const tracker = new MockTracker();
+            const client = makeClient(tracker, {
+                buildId: 'production',
+                releaseId: 'old-release',
+                etag,
+            });
+
+            await assignRelease({
+                client,
+                buildId: 'production',
+                releaseId: 'new-release',
+            });
+
+            const call = client.assignBuild.mock.getCall(0);
+            assertEqual('old-release', call.arguments[2].expectedReleaseId);
+            tracker.reset();
+        }
     });
 
     it('treats assigning the current Release as ordinary success', async () => {
@@ -63,7 +84,6 @@ describe('assignRelease()', ({ it }) => {
         const client = makeClient(tracker, {
             buildId: 'production',
             releaseId: 'same-release',
-            etag: '"same-release"',
         });
 
         const result = await assignRelease({
@@ -118,7 +138,7 @@ describe('assignRelease()', ({ it }) => {
         const call = client.assignBuild.mock.getCall(0);
         assertEqual('future-build', call.arguments[0]);
         assertEqual('release-id', call.arguments[1]);
-        assertEqual('*', call.arguments[2].ifNoneMatch);
+        assertEqual(true, call.arguments[2].expectUnassigned);
         assertEqual('restore', call.arguments[2].reason);
         tracker.reset();
     });
@@ -128,7 +148,6 @@ function makeClient(tracker, build) {
     const currentBuild = build ?? {
         buildId: 'production',
         releaseId: 'old-release',
-        etag: '"old-release"',
     };
 
     return {
@@ -136,7 +155,6 @@ function makeClient(tracker, build) {
         assignBuild: tracker.fn(async (buildId, releaseId) => ({
             buildId,
             releaseId,
-            etag: `"${ releaseId }"`,
         })),
     };
 }

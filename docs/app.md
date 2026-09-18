@@ -35,7 +35,8 @@ kixx.js app assign-build -e production \
 `carry-forward`, or `restore`. `--origin` and `--token` override the standard
 environment settings.
 
-The command reads the current pointer and uses its ETag for compare-and-swap.
+The command reads the current pointer and uses its release id as the
+compare-and-swap precondition.
 For a never-assigned build it uses `If-None-Match: *`. A concurrent change
 fails with a conflict and is never blindly retried. This command does not scan,
 upload, validate, or create content.

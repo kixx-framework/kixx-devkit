@@ -352,7 +352,7 @@ describe('publishing/publishing-api-client', ({ it }) => {
         assertEqual('?limit=10&cursor=activation+cursor', fetchMock.calls[1].url.search);
     });
 
-    it('lists builds and gets a build with its ETag', async () => {
+    it('lists builds and gets a build', async () => {
         const buildResource = {
             type: 'Build',
             id: 'production',
@@ -370,7 +370,7 @@ describe('publishing/publishing-api-client', ({ it }) => {
 
         assertEqual('production', builds[0].buildId);
         assertEqual('release-id', build.releaseId);
-        assertEqual('"release-id"', build.etag);
+        assertUndefined(build.etag);
     });
 
     it('assigns a build with exactly one pointer precondition', async () => {
@@ -386,15 +386,16 @@ describe('publishing/publishing-api-client', ({ it }) => {
         const matched = await client.assignBuild(
             'production',
             'new-release',
-            { ifMatch: '"old-release"', reason: 'rollback' },
+            { expectedReleaseId: 'old-release', reason: 'rollback' },
         );
         await client.assignBuild(
             'production',
             'new-release',
-            { ifNoneMatch: '*' },
+            { expectUnassigned: true },
         );
 
-        assertEqual('"new-release"', matched.etag);
+        assertEqual('new-release', matched.releaseId);
+        assertUndefined(matched.etag);
         assertEqual('"old-release"', fetchMock.calls[0].init.headers['if-match']);
         assertUndefined(fetchMock.calls[0].init.headers['if-none-match']);
         assertEqual('*', fetchMock.calls[1].init.headers['if-none-match']);
@@ -413,8 +414,8 @@ describe('publishing/publishing-api-client', ({ it }) => {
         });
         const both = await catchAsyncError(() => {
             return client.assignBuild('build-id', 'release-id', {
-                ifMatch: '"release-id"',
-                ifNoneMatch: '*',
+                expectedReleaseId: 'release-id',
+                expectUnassigned: true,
             });
         });
 
@@ -436,7 +437,7 @@ describe('publishing/publishing-api-client', ({ it }) => {
             }));
 
             const caught = await catchAsyncError(() => {
-                return client.assignBuild('build-id', 'release-id', { ifNoneMatch: '*' });
+                return client.assignBuild('build-id', 'release-id', { expectUnassigned: true });
             });
 
             assertEqual(expectedName, caught.name);

@@ -77,7 +77,7 @@ Cross-cutting concerns:
 
 ### Task P2-1: Negotiate format 4 and protocol 2 from one discovery response
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `docs/kixx-publishing-api.md` "Discovery"; `tmp/build-assignment-rollout.md` "Client handoff"
 
@@ -132,15 +132,15 @@ values through one module.
 
 **Acceptance criteria**
 
-- [ ] `FORMAT` is `4` and every existing fixed hash vector still passes.
-- [ ] Negotiation rejects a mismatched contract version, a mismatched
+- [x] `FORMAT` is `4` and every existing fixed hash vector still passes.
+- [x] Negotiation rejects a mismatched contract version, a mismatched
       addressing format, and a missing or non-`2` protocol version, each with
       a distinct message naming both values.
-- [ ] Negotiation accepts a discovery response carrying contract 1, format 4,
+- [x] Negotiation accepts a discovery response carrying contract 1, format 4,
       protocol 2, and ignores unknown extra attributes.
-- [ ] `discover()` issues one HTTP request when called repeatedly, including
+- [x] `discover()` issues one HTTP request when called repeatedly, including
       concurrently.
-- [ ] `publish-content.js` fails on an incompatible server during its
+- [x] `publish-content.js` fails on an incompatible server during its
       discovery phase, with the phase reported as before.
 
 **Validation**
@@ -152,19 +152,59 @@ values through one module.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete. `FORMAT` is 4, `lib/publishing/negotiate-capabilities.js`
+  owns the three version checks, `discover()` is memoized, and
+  `publish-content.js` delegates. No pointer-write code was touched, so the
+  tool still speaks protocol 1 on the wire and cannot assign a build until
+  P2-2 and P2-3 land.
+- Remaining: Nothing in this task.
+- Decisions and discoveries:
+  - The format 4 tripwire passed. Running the five recorded string vectors and
+    the binary vector against
+    `tmp/sample-app/kixx/content-addressable-store/addressing.js` (format 4)
+    reproduced every digest exactly, confirming format 4 is a storage-namespace
+    reset and object ids are unchanged. That finding is now recorded in both
+    the port's module comment and the test file's vector comment.
+  - `negotiateCapabilities(client)` takes the client and calls `discover()`
+    itself, rather than taking discovery attributes as the plan anticipated.
+    Memoization makes the extra call free, and it keeps every write path to one
+    line instead of a discover-then-validate pair that a caller could get
+    half right.
+  - Mismatches are collected and reported together. An un-upgraded deployment
+    fails two checks at once, and reporting them one command at a time wastes a
+    cutover window.
+  - Negotiation throws `UnsupportedServerError extends UsageError`, so the CLI
+    prints instructions without a stack. That required `kixx.js` to match
+    `error instanceof UsageError` instead of `error.name === 'UsageError'`;
+    the subclass name would otherwise have printed as a crash. The distinct
+    class is also what lets P2-3 tell a negotiation failure apart from an
+    assignment failure.
+  - `discover()` caches the promise, not the result, and clears it on
+    rejection so one failed discovery does not break the client for the rest
+    of the process.
+  - `maxInlineContentBytes` still appears in the `publish-content` test
+    fixture. It is harmless and belongs to P2-2's inline-content removal.
+- Actual files changed:
+  - `lib/publishing/addressing.js` — `FORMAT = 4`, format history note
+  - `lib/publishing/content-layout.js` — module comment
+  - `lib/publishing/negotiate-capabilities.js` — new
+  - `lib/publishing/publishing-api-client.js` — memoized `discover()`
+  - `lib/publishing/publish-content.js` — delegates; `assertCompatible()`
+    became `assertManifestSize()`
+  - `kixx.js` — `instanceof UsageError` in the top-level error report
+  - `test/unit-tests/lib/publishing/addressing.test.js`
+  - `test/unit-tests/lib/publishing/negotiate-capabilities.test.js` — new
+  - `test/unit-tests/lib/publishing/publish-content.test.js`
+  - `test/unit-tests/lib/publishing/publishing-api-client.test.js`
+- Validation run: `npm test` — linter clean, 558 tests pass, 0 disabled.
 - Blockers: None.
 
 ---
 
 ### Task P2-2: Send the JSON assignment precondition and stop retrying pointer writes
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `docs/kixx-publishing-api.md` "Assign a Release to a build"
 
@@ -213,20 +253,20 @@ never become a confusing `412`.
 
 **Acceptance criteria**
 
-- [ ] A build assignment sends `expectedAssignmentId` in the JSON body with
+- [x] A build assignment sends `expectedAssignmentId` in the JSON body with
       `data.type`, `data.id`, `releaseId`, and `reason`, and sends no
       conditional header.
-- [ ] `expectedAssignmentId: null` is serialized as JSON `null`, not omitted.
-- [ ] A missing `expectedAssignmentId` option fails locally before any fetch.
-- [ ] A network failure on a pointer write raises after one attempt; an
+- [x] `expectedAssignmentId: null` is serialized as JSON `null`, not omitted.
+- [x] A missing `expectedAssignmentId` option fails locally before any fetch.
+- [x] A network failure on a pointer write raises after one attempt; an
       object upload or release creation still retries as before.
-- [ ] A `429` or `5xx` on a pointer write is not retried.
-- [ ] `428`, `422`, and `412` responses still map to
+- [x] A `429` or `5xx` on a pointer write is not retried.
+- [x] `428`, `422`, and `412` responses still map to
       `PreconditionRequiredError`, `InvalidBuildAssignmentError`, and
       `BuildPointerConflictError`.
-- [ ] The returned record exposes `buildId`, `releaseId`, `assignedAt`, and
+- [x] The returned record exposes `buildId`, `releaseId`, `assignedAt`, and
       `assignmentId`.
-- [ ] No inline-content guard or `maxInlineContentBytes` fixture remains.
+- [x] No inline-content guard or `maxInlineContentBytes` fixture remains.
 
 **Validation**
 
@@ -237,13 +277,46 @@ never become a confusing `412`.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
-- Blockers: None.
+- Completed: Everything described above.
+- Current state: Complete on the wire. `assignBuild()` speaks protocol 2 and is
+  attempted exactly once.
+  **`lib/publishing/assign-release.js` still calls it with the removed
+  `expectedReleaseId` / `expectUnassigned` options, so every assignment path
+  now fails locally until P2-3 lands.** The suite stays green because those
+  callers are tested against a mock client, not the real one. Do not ship this
+  commit alone.
+- Remaining: Nothing in this task.
+- Decisions and discoveries:
+  - The retry opt-out is a `retry` option on the private `#request()`, set at
+    the one call site that needs it, rather than a URL pattern match. A future
+    non-idempotent write has to opt out deliberately instead of inheriting
+    safety from a regex.
+  - `#request()` now destructures `method`, `headers`, `body`, and `retry`
+    explicitly instead of spreading `init` into `fetch`. The spread would have
+    leaked `retry` into the fetch init.
+  - `assignBuild()` checks only that the precondition is a non-empty string or
+    `null`. The identity is opaque, and the server owns its vocabulary — it
+    answers `422 InvalidBuildAssignment` for a malformed token. The local
+    assertion exists to catch an *omitted* precondition, which would otherwise
+    cost a round trip to learn as `428`.
+  - Verified rather than assumed: `buildRecord()` spreads response attributes,
+    so `assignmentId` reaches callers with no mapping change. The test asserts
+    it on both `getBuild()` and `assignBuild()`.
+  - Build responses no longer carry an ETag. The `getBuild()` test now asserts
+    `assignmentId` comes from the body and that no `etag` property appears, so
+    nothing can quietly fall back to a header.
+- Actual files changed:
+  - `lib/publishing/publishing-api-client.js` — `assignBuild()` rewritten,
+    `#request()` retry opt-out, inline-content guard and helper deleted,
+    `isObjectNotNull` import dropped for `isNonEmptyString`
+  - `test/unit-tests/lib/publishing/publishing-api-client.test.js` — protocol 2
+    request-body assertions, JSON `null` precondition, single-attempt coverage
+    for both a retryable status and a network failure, inline-content
+    assertion removed
+  - `test/unit-tests/lib/publishing/publish-content.test.js` —
+    `maxInlineContentBytes` fixture removed
+- Validation run: `npm test` — linter clean, 560 tests pass, 0 disabled.
+- Blockers: None. P2-3 is now required to restore a working assignment path.
 
 ---
 

@@ -9,6 +9,11 @@ import {
 
 
 /*
+ * These vectors are unchanged from format 3: format 4 reset the storage
+ * namespace and left the digest alone. A format bump that does change one of
+ * them changes every object id this tool computes, and must be treated as a
+ * migration rather than a constant edit.
+ *
  * Regenerate these vectors from the project root with the upstream module:
  *
  * node --input-type=module -e "import { canonicalize, hashBlob } from
@@ -36,7 +41,7 @@ const STRING_VECTORS = [
 
 describe('publishing/addressing', ({ it }) => {
     it('pins the framework format', () => {
-        assertEqual(3, FORMAT);
+        assertEqual(4, FORMAT);
     });
 
     it('sorts object keys recursively and omits undefined properties', () => {

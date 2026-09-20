@@ -13,18 +13,22 @@ const ORIGIN = 'https://app.example.test';
 const TOKEN = 'publishing-secret';
 const JSON_API_CONTENT_TYPE = 'application/vnd.api+json';
 
+// Opaque to this client, but shaped like the server's version-4 UUIDs.
+const ASSIGNMENT_ID = '4a2f7b2e-6d1c-4f0a-9b83-1c5d7e9a0f21';
+const NEXT_ASSIGNMENT_ID = '8f3c1d40-52ab-4e19-8d77-6b0e2a4c9153';
+
 
 describe('publishing/publishing-api-client', ({ it }) => {
     it('discovers publishing capabilities without making a write', async () => {
         const capabilities = {
             runningBuildId: 'production',
             contentContractVersion: 1,
-            addressingFormat: 3,
+            addressingFormat: 4,
+            buildAssignmentProtocolVersion: 2,
             limits: {
                 maxObjectBytes: 26_214_400,
                 maxObjectStatusIds: 100,
                 maxManifestEntries: 10_000,
-                maxInlineContentBytes: 262_144,
             },
         };
         const fetchMock = makeRecordingFetch(() => makeResponse(200, {
@@ -38,6 +42,51 @@ describe('publishing/publishing-api-client', ({ it }) => {
         assertEqual('/publishing-api/v1/', fetchMock.calls[0].url.pathname);
         assertEqual('GET', fetchMock.calls[0].init.method);
         assertEqual(`Bearer ${ TOKEN }`, fetchMock.calls[0].init.headers.authorization);
+    });
+
+    it('issues one discovery request for repeated and concurrent callers', async () => {
+        const fetchMock = makeRecordingFetch(() => makeResponse(200, {
+            data: {
+                type: 'PublishingApi',
+                id: 'v1',
+                attributes: { runningBuildId: 'production' },
+            },
+        }));
+        const client = makeClient(fetchMock);
+
+        const [ first, second ] = await Promise.all([ client.discover(), client.discover() ]);
+        const third = await client.discover();
+
+        assertEqual(1, fetchMock.calls.length);
+        assertEqual('production', first.runningBuildId);
+        assertEqual('production', second.runningBuildId);
+        assertEqual('production', third.runningBuildId);
+    });
+
+    it('retries discovery after a failure instead of caching the rejection', async () => {
+        let serverIsDown = true;
+        const fetchMock = makeRecordingFetch(() => {
+            if (serverIsDown) {
+                return makeResponse(500, { errors: [ { status: '500' } ] });
+            }
+            return makeResponse(200, {
+                data: {
+                    type: 'PublishingApi',
+                    id: 'v1',
+                    attributes: { runningBuildId: 'production' },
+                },
+            });
+        });
+        const client = makeClient(fetchMock);
+
+        // The first call exhausts the retry loop and rejects. The client must
+        // not stay broken for the rest of the process.
+        const caught = await catchAsyncError(() => client.discover());
+        serverIsDown = false;
+        const capabilities = await client.discover();
+
+        assert(caught);
+        assertEqual('production', capabilities.runningBuildId);
     });
 
     it('deduplicates and batches object status requests using the discovered limit', async () => {
@@ -255,7 +304,7 @@ describe('publishing/publishing-api-client', ({ it }) => {
         }
     });
 
-    it('validates stored-object manifests and rejects inline content locally', async () => {
+    it('validates a stored-object manifest without persisting anything', async () => {
         const fetchMock = makeRecordingFetch(() => makeResponse(200, {
             data: {
                 type: 'ReleaseValidation',
@@ -271,14 +320,14 @@ describe('publishing/publishing-api-client', ({ it }) => {
         };
 
         const result = await client.validateRelease(manifest);
-        const caught = await catchAsyncError(() => client.validateRelease({
-            staticAssets: { 'site.css': { content: 'body {}' } },
-        }));
 
         assertEqual('release-id', result.releaseId);
         assertEqual(1, fetchMock.calls.length);
         assertEqual('/publishing-api/v1/releases/validation', fetchMock.calls[0].url.pathname);
-        assertMatches('does not accept inline content', caught.message);
+        assertEqual(
+            JSON.stringify(manifest),
+            JSON.stringify(JSON.parse(fetchMock.calls[0].init.body).data.attributes.manifest),
+        );
     });
 
     it('gets Release metadata and its complete manifest', async () => {
@@ -356,12 +405,16 @@ describe('publishing/publishing-api-client', ({ it }) => {
         const buildResource = {
             type: 'Build',
             id: 'production',
-            attributes: { releaseId: 'release-id', assignedAt: '2026-09-01T00:00:00.000Z' },
+            attributes: {
+                releaseId: 'release-id',
+                assignedAt: '2026-09-01T00:00:00.000Z',
+                assignmentId: ASSIGNMENT_ID,
+            },
         };
         const fetchMock = makeRecordingFetch((url) => {
             return url.pathname.endsWith('/builds')
                 ? makeResponse(200, { data: [ buildResource ] })
-                : makeResponse(200, { data: buildResource }, { etag: '"release-id"' });
+                : makeResponse(200, { data: buildResource });
         });
         const client = makeClient(fetchMock);
 
@@ -369,59 +422,125 @@ describe('publishing/publishing-api-client', ({ it }) => {
         const build = await client.getBuild('production');
 
         assertEqual('production', builds[0].buildId);
+        assertEqual(ASSIGNMENT_ID, builds[0].assignmentId);
         assertEqual('release-id', build.releaseId);
+        assertEqual('2026-09-01T00:00:00.000Z', build.assignedAt);
+
+        // The identity travels in the body alone; protocol 2 removed the
+        // Build ETag, and nothing may fall back to a response header.
+        assertEqual(ASSIGNMENT_ID, build.assignmentId);
         assertUndefined(build.etag);
     });
 
-    it('assigns a build with exactly one pointer precondition', async () => {
+    it('sends the observed assignment identity as the JSON precondition', async () => {
         const fetchMock = makeRecordingFetch(() => makeResponse(200, {
             data: {
                 type: 'Build',
                 id: 'production',
-                attributes: { releaseId: 'new-release', assignedAt: 'now' },
+                attributes: {
+                    releaseId: 'new-release',
+                    assignedAt: 'now',
+                    assignmentId: NEXT_ASSIGNMENT_ID,
+                },
             },
-        }, { etag: '"new-release"' }));
+        }));
         const client = makeClient(fetchMock);
 
-        const matched = await client.assignBuild(
-            'production',
-            'new-release',
-            { expectedReleaseId: 'old-release', reason: 'rollback' },
-        );
-        await client.assignBuild(
-            'production',
-            'new-release',
-            { expectUnassigned: true },
-        );
+        const assigned = await client.assignBuild('production', 'new-release', {
+            expectedAssignmentId: ASSIGNMENT_ID,
+            reason: 'rollback',
+        });
 
-        assertEqual('new-release', matched.releaseId);
-        assertUndefined(matched.etag);
-        assertEqual('"old-release"', fetchMock.calls[0].init.headers['if-match']);
-        assertUndefined(fetchMock.calls[0].init.headers['if-none-match']);
-        assertEqual('*', fetchMock.calls[1].init.headers['if-none-match']);
-        const resource = JSON.parse(fetchMock.calls[0].init.body).data;
+        assertEqual('new-release', assigned.releaseId);
+
+        // The response carries the identity the next write must quote.
+        assertEqual(NEXT_ASSIGNMENT_ID, assigned.assignmentId);
+
+        const { init } = fetchMock.calls[0];
+        assertEqual('PUT', init.method);
+        assertEqual(JSON_API_CONTENT_TYPE, init.headers['content-type']);
+        assertUndefined(init.headers['if-match']);
+        assertUndefined(init.headers['if-none-match']);
+
+        const resource = JSON.parse(init.body).data;
+        assertEqual('Build', resource.type);
         assertEqual('production', resource.id);
         assertEqual('new-release', resource.attributes.releaseId);
+        assertEqual(ASSIGNMENT_ID, resource.attributes.expectedAssignmentId);
         assertEqual('rollback', resource.attributes.reason);
     });
 
-    it('rejects both or neither build precondition locally', async () => {
+    it('serializes a never-assigned precondition as JSON null', async () => {
+        const fetchMock = makeRecordingFetch(() => makeResponse(200, {
+            data: {
+                type: 'Build',
+                id: 'next',
+                attributes: { releaseId: 'release-id', assignmentId: ASSIGNMENT_ID },
+            },
+        }));
+        const client = makeClient(fetchMock);
+
+        await client.assignBuild('next', 'release-id', { expectedAssignmentId: null });
+
+        const { attributes } = JSON.parse(fetchMock.calls[0].init.body).data;
+
+        // Omitting the field is 428, so null must survive serialization.
+        assert(Object.hasOwn(attributes, 'expectedAssignmentId'));
+        assertEqual(null, attributes.expectedAssignmentId);
+        assertEqual('publish', attributes.reason);
+    });
+
+    it('rejects an omitted or malformed precondition locally', async () => {
         const fetchMock = makeRecordingFetch();
         const client = makeClient(fetchMock);
 
-        const neither = await catchAsyncError(() => {
+        const omitted = await catchAsyncError(() => {
             return client.assignBuild('build-id', 'release-id', {});
         });
-        const both = await catchAsyncError(() => {
-            return client.assignBuild('build-id', 'release-id', {
-                expectedReleaseId: 'release-id',
-                expectUnassigned: true,
+        const noOptions = await catchAsyncError(() => {
+            return client.assignBuild('build-id', 'release-id');
+        });
+        const empty = await catchAsyncError(() => {
+            return client.assignBuild('build-id', 'release-id', { expectedAssignmentId: '' });
+        });
+
+        assertMatches('requires expectedAssignmentId', omitted.message);
+        assertMatches('requires expectedAssignmentId', noOptions.message);
+        assertMatches('requires expectedAssignmentId', empty.message);
+        assertEqual(0, fetchMock.calls.length);
+    });
+
+    it('attempts a build assignment exactly once', async () => {
+        // Protocol 2 has no idempotent retry: a resend after a lost response
+        // fails its precondition even though the first attempt committed.
+        const retryableFetch = makeRecordingFetch(() => makeResponse(503, {
+            errors: [ { status: '503' } ],
+        }));
+        const retryableClient = makeClient(retryableFetch);
+
+        const serverFailure = await catchAsyncError(() => {
+            return retryableClient.assignBuild('production', 'release-id', {
+                expectedAssignmentId: ASSIGNMENT_ID,
             });
         });
 
-        assertMatches('exactly one', neither.message);
-        assertMatches('exactly one', both.message);
-        assertEqual(0, fetchMock.calls.length);
+        const networkFetch = makeRecordingFetch(() => {
+            throw new Error('connection reset');
+        });
+        const networkClient = makeClient(networkFetch);
+
+        const networkFailure = await catchAsyncError(() => {
+            return networkClient.assignBuild('production', 'release-id', {
+                expectedAssignmentId: null,
+            });
+        });
+
+        assertEqual(1, retryableFetch.calls.length);
+        assertEqual(503, serverFailure.status);
+        assertEqual(1, serverFailure.attempts);
+        assertEqual(1, networkFetch.calls.length);
+        assertEqual(null, networkFailure.status);
+        assertEqual(1, networkFailure.attempts);
     });
 
     it('surfaces build protocol failures as distinct error classes', async () => {
@@ -437,7 +556,9 @@ describe('publishing/publishing-api-client', ({ it }) => {
             }));
 
             const caught = await catchAsyncError(() => {
-                return client.assignBuild('build-id', 'release-id', { expectUnassigned: true });
+                return client.assignBuild('build-id', 'release-id', {
+                    expectedAssignmentId: null,
+                });
             });
 
             assertEqual(expectedName, caught.name);

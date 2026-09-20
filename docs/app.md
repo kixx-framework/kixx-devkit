@@ -4,6 +4,17 @@ Commands for creating, assigning, and rolling back application content through
 the Publishing API. See [configuration.md](configuration.md) for
 `--environment`, the origin, and the publishing token these commands share.
 
+## Server requirement
+
+These commands require a deployment serving build assignment protocol 2 and
+addressing format 4. Every command that writes reads the server's capabilities
+first and refuses an older deployment before uploading an object, creating a
+Release, or touching a build pointer. There is no fallback to the earlier
+header-based assignment protocol.
+
+A refusal names each mismatch and the value this tool supports. The resolution
+is to upgrade the deployment or target one that is already upgraded.
+
 ## `create-release`
 
 Scans and uploads application content and creates an immutable Release without
@@ -35,11 +46,36 @@ kixx.js app assign-build -e production \
 `carry-forward`, or `restore`. `--origin` and `--token` override the standard
 environment settings.
 
-The command reads the current pointer and uses its release id as the
-compare-and-swap precondition.
-For a never-assigned build it uses `If-None-Match: *`. A concurrent change
-fails with a conflict and is never blindly retried. This command does not scan,
-upload, validate, or create content.
+The command reads the build pointer and sends the `assignmentId` it observed
+as the write's precondition. That identity is opaque and server-generated: it
+is copied verbatim and never derived from a Release id. A build that has never
+been assigned is written with an explicit empty precondition, which is how a
+new build id is bootstrapped.
+
+Output reports the resulting assignment identity. It is the value that ties
+this command to an entry in the build's activation history, and the value the
+next write will have to quote.
+
+A concurrent pointer change fails with a conflict and is never retried. See
+[Pointer conflicts](#pointer-conflicts). This command does not scan, upload,
+validate, or create content.
+
+### Pointer conflicts
+
+Every assignment this tool performs is conditional on the identity it read a
+moment earlier. When that identity is stale the server refuses the write and
+the command stops, reporting what it intended, the identity it expected, and
+what the pointer holds now.
+
+Nothing is retried, and the tool never resolves a conflict on its own. A
+conflict means something else moved the pointer, so a retry would overwrite
+that change — possibly a publish another operator is in the middle of. Read
+the build, decide whether that content should still be replaced, and run the
+command again only then.
+
+Assignment has no idempotent retry at all. If a command dies without printing
+a result, the write may or may not have committed: read the build before
+assuming either way.
 
 ## `publish`
 
@@ -64,13 +100,21 @@ a Release explicitly.
 
 The command scans `pages/`, `templates/`, `static-assets/`, `public/`, and
 `emails/`; validates the complete tree; checks which content-addressed objects
-exist; uploads misses; creates a Release; then compare-and-swap assigns that
-Release. A concurrent pointer change stops assignment rather than overwriting
-it. Dry-run stops after the object-status diff and creates or assigns nothing.
+exist; uploads misses; creates a Release; then assigns that Release under the
+pointer precondition described in [`assign-build`](#assign-build). A concurrent
+pointer change stops assignment rather than overwriting it. Dry-run stops after
+the object-status diff and creates or assigns nothing.
 
-Output includes environment, origin, build id, resource counts, uploaded
-resources, unmatched files, and the Release id. No checkout-local publishing
-state is read or written.
+Output includes environment, origin, build id, assignment identity, resource
+counts, uploaded resources, unmatched files, and the Release id. A dry run
+reports no assignment identity because it assigns nothing. No checkout-local
+publishing state is read or written.
+
+If the Release is created but the assignment fails, the error reports the
+Release id and a ready-to-run `app assign-build` command. The Release already
+exists on the server, so recovery is an assignment, not a republish. The
+recovery command carries no precondition: `assign-build` observes the current
+identity itself when it runs.
 
 ### Stylesheet bundling
 
@@ -125,7 +169,21 @@ kixx.js app rollback -e production --build-id build-id \
 ```
 
 Pass exactly one of `--list` or `--release-id`. List mode reads recent Releases
-and activations only. Assignment uses the same compare-and-swap operation as
-`assign-build` with reason `rollback`; a concurrent pointer change stops the
-operation. Origin and token come from the standard environment settings and
-may be overridden with `--origin` and `--token`.
+and activations only, and writes nothing.
+
+List mode prints each activation as a transition — the Release the build moved
+from, the Release it moved to, when, why, and the assignment identity that
+recorded it. A first assignment has no predecessor and prints as such. Release
+ids print in full so one can be pasted straight back into `--release-id`.
+
+An empty activation history is reported, not treated as an error. Activation
+history is best-effort on the server: an assignment that commits can still
+lose its history entry, and a no-op assignment records nothing at all. The
+build pointer, not the history, is authoritative, and a missing entry never
+blocks the next assignment.
+
+Assignment uses the same conditional write as `assign-build`, with reason
+`rollback`; a concurrent pointer change stops the operation. See
+[Pointer conflicts](#pointer-conflicts). Origin and token come from the
+standard environment settings and may be overridden with `--origin` and
+`--token`.

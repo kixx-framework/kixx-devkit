@@ -525,8 +525,10 @@ For changed Worker inputs the command:
 
 1. prepares and freezes the exact Worker payload and its unique `BUILD_ID`;
 2. uploads content objects and creates an immutable Publishing API Release;
-3. assigns that Release to the future build with `If-None-Match: *`;
-4. reads the pointer back and verifies its Release id;
+3. assigns that Release to the future build under an empty pointer
+   precondition, which succeeds only if that build id has never been assigned;
+4. reads the pointer back and verifies both its Release id and the assignment
+   identity the write returned;
 5. uploads the prepared Worker payload; and
 6. deploys it, unless Cloudflare had to deploy during creation to provision a
    Durable Object namespace.
@@ -535,11 +537,16 @@ Content is therefore ready before any upload that could move traffic. A build
 id collision stops at the first-assignment precondition and never overwrites
 the existing pointer.
 
+Verifying the assignment identity as well as the Release id is what catches a
+pointer that was reassigned between the write and the read-back. Two separate
+writes can name the same Release, so the Release id alone cannot tell them
+apart; the identity can.
+
 ### Other outcomes
 
 When Worker inputs are unchanged, the command creates a content Release and
-compare-and-swap assigns it to the `runningBuildId` returned by Publishing API
-discovery. It creates no Worker version or future pointer and deploys nothing.
+assigns it to the `runningBuildId` returned by Publishing API discovery, under
+the pointer precondition described in [app.md](app.md#assign-build). It creates no Worker version or future pointer and deploys nothing.
 
 When resource IDs are resolved, the command prints them and stops after Worker
 preparation. It performs no content scan, Release creation, assignment,
@@ -550,7 +557,8 @@ Worker-version upload, or deployment.
 | Failure point | Remote state and recovery |
 | --- | --- |
 | Before future-build assignment | Objects or an immutable Release may remain; traffic and Worker versions are unchanged. Fix the error and rerun. |
-| After assignment, before Worker creation | An inert future pointer may remain. Inspect the reported build id before retrying; traffic is unchanged. |
+| After assignment, before Worker creation | An inert future pointer may remain. Inspect the reported build id before retrying; traffic is unchanged. A rerun picks a new build id, so it will not collide with that pointer. |
+| Staged pointer verification | Something reassigned the future build between the write and the read-back. No Worker version was created and traffic is unchanged. Investigate who moved it before rerunning. |
 | Worker creation | The verified future pointer remains inert unless Cloudflare forced deployment. Inspect the reported build and retry safely. |
 | Explicit deployment | The build is staged and the version is undeployed. Run `cloudflare deploy-version <version-id> --environment <name>`. |
 | Content-only publish | No Worker version or deployment occurred. Fix the publishing error and rerun. |

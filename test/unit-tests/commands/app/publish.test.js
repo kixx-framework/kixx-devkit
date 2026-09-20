@@ -3,7 +3,10 @@ import { assertEqual, assertMatches } from 'kixx-assert';
 import { describe, MockTracker } from 'kixx-test';
 
 import AppPublishCommand from '../../../../commands/app/publish.js';
+import { UnsupportedServerError } from '../../../../lib/publishing/negotiate-capabilities.js';
 import { BuildPointerConflictError } from '../../../../lib/publishing/publishing-api-error.js';
+
+const ASSIGNMENT_ID = '4a2f7b2e-6d1c-4f0a-9b83-1c5d7e9a0f21';
 
 describe('AppPublishCommand', ({ it }) => {
     it('creates and assigns a Release to discovery\'s running build', async () => {
@@ -19,8 +22,11 @@ describe('AppPublishCommand', ({ it }) => {
         assertEqual('running-build', calls.assignedBuildId);
         assertEqual('release-id', calls.assignedReleaseId);
         const output = stdout.mock.getCall(0).arguments[0];
-        assertMatches('BUILD_ID:   running-build', output);
+        assertMatches('BUILD_ID:    running-build', output);
         assertMatches('Release: release-id', output);
+
+        // The identity correlates this publish with an activation entry.
+        assertMatches(`Assignment:  ${ ASSIGNMENT_ID }`, output);
         tracker.reset();
     });
 
@@ -36,6 +42,9 @@ describe('AppPublishCommand', ({ it }) => {
         const output = stdout.mock.getCall(0).arguments[0];
         assertMatches('unvalidated preview', output);
         assertEqual(false, output.includes('Release:'));
+
+        // Nothing was assigned, so there is no identity to report.
+        assertEqual(false, output.includes('Assignment:'));
         tracker.reset();
     });
 
@@ -95,6 +104,30 @@ describe('AppPublishCommand', ({ it }) => {
         }
     });
 
+    it('reports a refused server without claiming a stranded Release', async () => {
+        const tracker = new MockTracker();
+        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const calls = [];
+        const command = makeCommand({
+            calls,
+            assignRelease: async () => {
+                calls.push('assign');
+                throw new UnsupportedServerError('server too old');
+            },
+        });
+
+        try {
+            const caught = await catchAsyncError(() => command.run({ environment: 'production' }));
+
+            // Nothing was attempted against the pointer, so the recovery
+            // command a ReleaseAssignmentError prints would be misleading.
+            assertEqual('UnsupportedServerError', caught.name);
+            assertEqual(0, stdout.mock.callCount());
+        } finally {
+            tracker.reset();
+        }
+    });
+
     it('fails a null discovered build before scanning or publishing', async () => {
         const calls = [];
         const client = { discover: async () => ({ runningBuildId: null }) };
@@ -117,6 +150,11 @@ function makeCommand(args) {
             calls.push('assign');
             calls.assignedBuildId = options.buildId;
             calls.assignedReleaseId = options.releaseId;
+            return {
+                buildId: options.buildId,
+                releaseId: options.releaseId,
+                assignmentId: ASSIGNMENT_ID,
+            };
         },
     } = args;
 

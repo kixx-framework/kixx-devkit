@@ -432,7 +432,7 @@ actionable report when the pointer moved underneath it.
 
 ### Task P2-4: Surface assignment identities in commands and the release pipeline
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** P2-3
 **Documentation:** `docs/kixx-publishing-api.md` "Build activation history"
 
@@ -489,14 +489,14 @@ pointer it staged rather than only the Release it names.
 
 **Acceptance criteria**
 
-- [ ] Each of the three commands prints the resulting assignment id.
-- [ ] `rollback --list` renders real activation attributes, including a first
+- [x] Each of the three commands prints the resulting assignment id.
+- [x] `rollback --list` renders real activation attributes, including a first
       assignment with a `null` `fromReleaseId`.
-- [ ] `rollback --list` with no activations prints an explanation and exits 0.
-- [ ] Pre-staging fails when the read-back `assignmentId` differs from the
+- [x] `rollback --list` with no activations prints an explanation and exits 0.
+- [x] Pre-staging fails when the read-back `assignmentId` differs from the
       assignment response, with both values in the message, and no Worker
       version is created.
-- [ ] A stranded-Release error still prints a runnable recovery command with
+- [x] A stranded-Release error still prints a runnable recovery command with
       no precondition token in it.
 
 **Validation**
@@ -508,19 +508,42 @@ pointer it staged rather than only the Release it names.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete.
+- Remaining: Nothing in this task.
+- Decisions and discoveries:
+  - The `BUILD_ID:` label in publish output was misaligned by one column
+    against `Environment:` and `Origin:`, and the test asserted the misaligned
+    string. Fixed both, and `Assignment:` aligns with them.
+  - The old `rollback --list` fixture asserted `entry.releaseId`, the same
+    attribute the renderer read and the API never returned — the test agreed
+    with the bug. The fixture now carries the real Activation shape, which is
+    what makes the first-assignment and empty-history cases testable at all.
+  - Discovered while validating: a command test that fails after mocking
+    `process.stdout.write` silences the runner completely. `run-tests.js`
+    writes its summary through `process.stdout.write` and calls
+    `process.exit()` from that write's callback, which the `() => true` mock
+    never invokes, so the run prints nothing and exits 0 — a failing suite
+    looks like a passing one. Not fixed here; see "Follow-up" below.
+- Actual files changed:
+  - `commands/app/publish.js` — capture the assignment, print `Assignment:`,
+    align `BUILD_ID:`
+  - `commands/app/assign-build.js` — print `Assignment:`
+  - `commands/app/rollback.js` — print `Assignment:`; `renderHistory()`
+    rewritten onto real Activation attributes
+  - `lib/release/cloudflare-release.js` — verify the staged assignment
+    identity as well as the Release id
+  - `test/unit-tests/commands/app/publish.test.js`,
+    `assign-build.test.js`, `rollback.test.js`,
+    `test/unit-tests/lib/release/cloudflare-release.test.js`
+- Validation run: `npm test` — linter clean, 571 tests pass, 0 disabled.
 - Blockers: None.
 
 ---
 
 ### Task P2-5: Document protocol 2 behavior and the server requirement
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** P2-1, P2-2, P2-3, P2-4
 
 **Objective**
@@ -558,11 +581,11 @@ to do after a conflict instead of implying a retry is safe.
 
 **Acceptance criteria**
 
-- [ ] No documentation describes conditional headers or release-id
+- [x] No documentation describes conditional headers or release-id
       preconditions.
-- [ ] The server requirement is stated once, where a reader looks for it.
-- [ ] Conflict and best-effort-history behavior are documented.
-- [ ] Documented command output matches what the commands print after P2-4.
+- [x] The server requirement is stated once, where a reader looks for it.
+- [x] Conflict and best-effort-history behavior are documented.
+- [x] Documented command output matches what the commands print after P2-4.
 
 **Validation**
 
@@ -571,13 +594,46 @@ to do after a conflict instead of implying a retry is safe.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete. The plan is finished.
+- Remaining: Nothing in this task.
+- Decisions and discoveries:
+  - `docs/app.md` gained a "Server requirement" section and a "Pointer
+    conflicts" section. Conflict behavior was previously described once per
+    command in slightly different words; it is one shared section now, linked
+    from `assign-build`, `publish`, and `rollback`.
+  - Documented explicitly that assignment has no idempotent retry, so a
+    command that dies without printing a result leaves the write in an unknown
+    state that must be resolved by reading the build.
+  - `docs/cloudflare.md` gained a failure-recovery row for staged-pointer
+    verification, and states why the identity comparison catches what the
+    Release id cannot.
+  - Audited all of `docs/` and `README.md` for `If-Match`, `If-None-Match`,
+    `ETag`, "compare-and-swap", and inline content; the only remaining `etag`
+    is the unrelated Cloudflare script etag.
+- Actual files changed:
+  - `docs/app.md`, `docs/cloudflare.md`, `README.md`
+- Validation run: `npm test` — linter clean, 571 tests pass, 0 disabled.
 - Blockers: None.
+
+---
+
+## Follow-up: test runner hides failures in command tests
+
+Not part of this plan, and not fixed. Recorded because it was found while
+validating P2-4 and it undermines every future `npm test` claim.
+
+`run-tests.js` reports through `write()`, which calls
+`process.stdout.write(msg, callback)` and, for the final summary, calls
+`process.exit(exitCode)` from that callback. Command tests replace
+`process.stdout.write` with `() => true` through `MockTracker`. When such a
+test fails, `tracker.reset()` never runs, the mock stays installed for the rest
+of the process, and the runner's own summary and exit call are swallowed: the
+run prints nothing and exits 0.
+
+A failing suite is therefore indistinguishable from a passing one, in CI as
+well as locally. A fix would be to report through `fs.writeSync(1, msg)`, which
+no in-process mock can intercept.
 
 ---
 

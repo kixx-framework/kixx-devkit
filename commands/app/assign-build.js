@@ -50,6 +50,7 @@ export default class AppAssignBuildCommand {
             `Origin:      ${ connection.origin }`,
             `BUILD_ID:    ${ result.buildId }`,
             `Release:     ${ result.releaseId }`,
+            `Assignment:  ${ result.assignmentId }`,
             `Reason:      ${ options?.reason ?? 'publish' }`,
             '',
         ].join('\n')));

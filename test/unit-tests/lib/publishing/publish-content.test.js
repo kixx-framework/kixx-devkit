@@ -88,10 +88,11 @@ describe('publishing/publish-content', ({ it }) => {
         assertEqual(0, client.releases.length);
     });
 
-    it('rejects unsupported server contracts before status or writes', async () => {
+    it('rejects unsupported servers before status or writes', async () => {
         for (const capabilities of [
             makeCapabilities({ contentContractVersion: 2 }),
-            makeCapabilities({ addressingFormat: 2 }),
+            makeCapabilities({ addressingFormat: 3 }),
+            makeCapabilities({ buildAssignmentProtocolVersion: undefined }),
         ]) {
             const client = makeClient({ capabilities });
             const caught = await catchAsyncError(() => {
@@ -101,7 +102,7 @@ describe('publishing/publish-content', ({ it }) => {
             });
 
             assertEqual('discovery', caught.phase);
-            assertMatches('Unsupported Publishing API', caught.message);
+            assertMatches('incompatible with this version of the devkit', caught.message);
             assertEqual(0, client.statusChecks.length);
             assertEqual(0, client.uploads.length);
             assertEqual(0, client.releases.length);
@@ -204,12 +205,12 @@ function makeCapabilities(overrides) {
     return {
         runningBuildId: 'production',
         contentContractVersion: 1,
-        addressingFormat: 3,
+        addressingFormat: 4,
+        buildAssignmentProtocolVersion: 2,
         limits: {
             maxObjectBytes: 26_214_400,
             maxObjectStatusIds: 100,
             maxManifestEntries: 10_000,
-            maxInlineContentBytes: 262_144,
         },
         ...overrides,
     };

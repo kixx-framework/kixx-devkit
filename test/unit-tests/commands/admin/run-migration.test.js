@@ -1,8 +1,8 @@
-import process from 'node:process';
 import { assert, assertEqual, assertMatches } from 'kixx-assert';
-import { describe, MockTracker } from 'kixx-test';
+import { describe } from 'kixx-test';
 
 import AdminRunMigrationCommand from '../../../../commands/admin/run-migration.js';
+import captureOutput from '../../helpers/capture-output.js';
 import {
     MigrationAlreadyAppliedError,
     MigrationCursorConflictError,
@@ -11,10 +11,10 @@ import {
 
 describe('AdminRunMigrationCommand', ({ it }) => {
     it('sends exactly one real batch and prints done, status, stats, and cursor', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         let callCount = 0;
         const command = makeCommand({
+            output,
             client: {
                 runMigration: async () => {
                     callCount += 1;
@@ -24,34 +24,32 @@ describe('AdminRunMigrationCommand', ({ it }) => {
         });
 
         const code = await command.run({ environment: 'production' }, 'example-noop');
-        const output = stdout.mock.getCall(stdout.mock.callCount() - 1).arguments[0];
+        const text = output.chunks.at(-1);
 
         assertEqual(0, code);
         assertEqual(1, callCount);
-        assertMatches('done: true', output);
-        assertMatches('status: applied', output);
-        tracker.reset();
+        assertMatches('done: true', text);
+        assertMatches('status: applied', text);
     });
 
     it('prints the resolved environment and origin before a real run', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         const command = makeCommand({
+            output,
             client: { runMigration: async () => ({ done: true, status: 'applied', stats: {}, cursor: null }) },
         });
 
         await command.run({ environment: 'production' }, 'example-noop');
 
-        assertMatches('production', stdout.mock.getCall(0).arguments[0]);
-        assertMatches('https://admin.example.test', stdout.mock.getCall(0).arguments[0]);
-        tracker.reset();
+        assertMatches('production', output.chunks[0]);
+        assertMatches('https://admin.example.test', output.chunks[0]);
     });
 
     it('does not print the target echo for a dry run and sends dryRun true', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         const received = {};
         const command = makeCommand({
+            output,
             client: {
                 runMigration: async (_id, options) => {
                     Object.assign(received, options);
@@ -63,8 +61,7 @@ describe('AdminRunMigrationCommand', ({ it }) => {
         await command.run({ environment: 'production', 'dry-run': true }, 'example-noop');
 
         assertEqual(true, received.dryRun);
-        assertEqual(1, stdout.mock.callCount());
-        tracker.reset();
+        assertEqual(1, output.chunks.length);
     });
 
     it('fails with a UsageError when --dry-run and --force are both passed', async () => {
@@ -112,8 +109,6 @@ describe('AdminRunMigrationCommand', ({ it }) => {
 
     it('proceeds without prompting when --force and --yes are both passed', async () => {
         let confirmed = false;
-        const tracker = new MockTracker();
-        tracker.method(process.stdout, 'write', () => true);
         const command = makeCommand({
             client: {
                 runMigration: async () => ({ done: true, status: 'applied', stats: {}, cursor: null }),
@@ -126,13 +121,12 @@ describe('AdminRunMigrationCommand', ({ it }) => {
         await command.run({ environment: 'production', force: true, yes: true }, 'example-noop');
 
         assertEqual(false, confirmed);
-        tracker.reset();
     });
 
     it('states the next invocation to run when the batch is not done', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         const command = makeCommand({
+            output,
             client: {
                 runMigration: async () => ({
                     done: false, status: 'dry-run', stats: {}, cursor: 'cursor-2', dryRun: true,
@@ -141,17 +135,14 @@ describe('AdminRunMigrationCommand', ({ it }) => {
         });
 
         await command.run({ environment: 'production', 'dry-run': true }, 'example-noop');
-        const output = stdout.mock.getCall(stdout.mock.callCount() - 1).arguments[0];
+        const text = output.chunks.at(-1);
 
-        assertMatches('Next:', output);
-        assertMatches('cursor-2', output);
-        assertMatches('--dry-run', output);
-        tracker.reset();
+        assertMatches('Next:', text);
+        assertMatches('cursor-2', text);
+        assertMatches('--dry-run', text);
     });
 
     it('renders distinct guidance for each migration conflict error', async () => {
-        const tracker = new MockTracker();
-        tracker.method(process.stdout, 'write', () => true);
         const cases = [
             [ MigrationAlreadyAppliedError, '--force' ],
             [ MigrationCursorConflictError, '--force' ],
@@ -175,7 +166,6 @@ describe('AdminRunMigrationCommand', ({ it }) => {
             assertEqual('UsageError', caught.name);
             assertMatches(expectedPhrase, caught.message);
         }
-        tracker.reset();
     });
 
     it('fails with a UsageError when the migration id argument is missing', async () => {
@@ -189,9 +179,10 @@ describe('AdminRunMigrationCommand', ({ it }) => {
 });
 
 function makeCommand(args) {
-    const { client, promptForConfirmation } = args;
+    const { client, promptForConfirmation, output = captureOutput() } = args;
 
     return new AdminRunMigrationCommand({
+        output,
         config: { app: { environments: { production: { origin: 'https://admin.example.test' } } } },
         createClient: () => client,
         promptForValue: async () => 'stub-value',

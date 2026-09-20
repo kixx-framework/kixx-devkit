@@ -45,11 +45,12 @@ export default class AppAssignBuildCommand {
             reason: options?.reason ?? 'publish',
         });
 
-        process.stdout.write(wrapText([
+        (this.#args.output ?? process.stdout).write(wrapText([
             `Environment: ${ connection.environment }`,
             `Origin:      ${ connection.origin }`,
             `BUILD_ID:    ${ result.buildId }`,
             `Release:     ${ result.releaseId }`,
+            `Assignment:  ${ result.assignmentId }`,
             `Reason:      ${ options?.reason ?? 'publish' }`,
             '',
         ].join('\n')));

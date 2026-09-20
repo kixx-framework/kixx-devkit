@@ -3,6 +3,7 @@ import process from 'node:process';
 import assignRelease from '../../lib/publishing/assign-release.js';
 import defaultFileSystem from '../../lib/file-system.js';
 import publishContent from '../../lib/publishing/publish-content.js';
+import { UnsupportedServerError } from '../../lib/publishing/negotiate-capabilities.js';
 import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';
 import resolveRunningBuild from '../../lib/publishing/resolve-running-build.js';
 import scanContentSources from '../../lib/publishing/scan-content-sources.js';
@@ -91,15 +92,23 @@ export default class AppPublishCommand {
             provenance: { client: 'kixx-devkit', intendedForBuildId: buildId },
         });
 
+        let assignment;
+
         if (!result.dryRun) {
             try {
-                await (this.#args.assignRelease ?? assignRelease)({
+                assignment = await (this.#args.assignRelease ?? assignRelease)({
                     client: connection.client,
                     buildId,
                     releaseId: result.releaseId,
                     reason: 'publish',
                 });
             } catch (cause) {
+                // An incompatible server is refused before the assignment is
+                // attempted, so there is no half-finished publish to recover.
+                if (cause instanceof UnsupportedServerError) {
+                    throw cause;
+                }
+
                 // The Release already exists on the server at this point.
                 // Reporting only the assignment failure would hide that and
                 // strand the operator without the id needed to recover.
@@ -113,8 +122,8 @@ export default class AppPublishCommand {
             }
         }
 
-        process.stdout.write(wrapText(renderPublishResult({
-            result: { ...result, buildId },
+        (this.#args.output ?? process.stdout).write(wrapText(renderPublishResult({
+            result: { ...result, buildId, assignmentId: assignment?.assignmentId },
             environment: connection.environment,
             origin: connection.origin,
             verbose: options?.verbose ?? false,
@@ -135,6 +144,7 @@ export function renderPublishResult(args) {
         environment,
         origin,
         buildId: result.buildId,
+        assignmentId: result.assignmentId,
         verbose,
     });
 }
@@ -150,6 +160,7 @@ export function renderReleaseResult(args) {
         environment = result.environment,
         origin = result.origin,
         buildId,
+        assignmentId,
         verbose,
     } = args ?? {};
     const totalCount = result.matchedCount + result.uploadedCount;
@@ -160,7 +171,13 @@ export function renderReleaseResult(args) {
     ];
 
     if (buildId) {
-        lines.push(`BUILD_ID:   ${ buildId }`);
+        lines.push(`BUILD_ID:    ${ buildId }`);
+    }
+
+    // The assignment identity is the only value tying this output to an entry
+    // in the build's activation history.
+    if (assignmentId) {
+        lines.push(`Assignment:  ${ assignmentId }`);
     }
 
     lines.push(

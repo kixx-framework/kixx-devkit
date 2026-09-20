@@ -57,7 +57,7 @@ export default class AdminAcceptInviteCommand {
 
         const account = await acceptInvite(connection.client, inviteToken, { emailAddress, password });
 
-        process.stdout.write(wrapText(
+        (this.#args.output ?? process.stdout).write(wrapText(
             `Created admin account ${ account.adminUserId } <${ account.emailAddress }> `
             + `at ${ account.userCreationDate }\n`,
         ));

@@ -1,16 +1,17 @@
 import process from 'node:process';
 import { assert, assertEqual, assertMatches } from 'kixx-assert';
-import { describe, MockTracker } from 'kixx-test';
+import { describe } from 'kixx-test';
 
 import AdminAcceptInviteCommand from '../../../../commands/admin/accept-invite.js';
 import { InvalidInviteError } from '../../../../lib/admin/admin-api-error.js';
+import captureOutput from '../../helpers/capture-output.js';
 
 describe('AdminAcceptInviteCommand', ({ it }) => {
     it('creates the account and prints its id, email, and creation date', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         const received = {};
         const command = makeCommand({
+            output,
             answers: {
                 'Invite token': 'invite-secret',
                 'New admin email address': 'new-admin@example.test',
@@ -35,9 +36,8 @@ describe('AdminAcceptInviteCommand', ({ it }) => {
         assertEqual('invite-secret', received.inviteToken);
         assertEqual('new-admin@example.test', received.account.emailAddress);
         assertEqual('a-strong-password-16plus', received.account.password);
-        assertMatches('admin-id', stdout.mock.getCall(0).arguments[0]);
-        assertMatches('new-admin@example.test', stdout.mock.getCall(0).arguments[0]);
-        tracker.reset();
+        assertMatches('admin-id', output.chunks[0]);
+        assertMatches('new-admin@example.test', output.chunks[0]);
     });
 
     it('fails locally when the password is shorter than 16 characters, sending no request', async () => {
@@ -108,9 +108,10 @@ describe('AdminAcceptInviteCommand', ({ it }) => {
 });
 
 function makeCommand(args) {
-    const { answers, twiceAnswer, client } = args;
+    const { answers, twiceAnswer, client, output = captureOutput() } = args;
 
     return new AdminAcceptInviteCommand({
+        output,
         config: { app: { environments: { production: { origin: 'https://admin.example.test' } } } },
         createClient: () => client,
         promptForValue: async (options) => answers[options.label],

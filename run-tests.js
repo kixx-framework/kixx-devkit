@@ -1,5 +1,6 @@
 import process from 'node:process';
 import util from 'node:util';
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { EOL } from 'node:os';
@@ -142,9 +143,11 @@ async function main() {
 
         message += EOL;
 
-        write(message, () => {
-            process.exit(exitCode);
-        });
+        write(message);
+
+        // Let Node exit on its own once the event loop drains. A forced exit
+        // here would truncate any output still queued by the test files.
+        process.exitCode = exitCode;
     });
 }
 
@@ -311,12 +314,16 @@ function dropDuplicateFilepaths(testFiles) {
     });
 }
 
-function write(msg, callback) {
-    process.stdout.write(msg, callback);
+// Reports through the file descriptor rather than process.stdout so that a
+// test which replaces process.stdout.write cannot intercept, and a test which
+// fails before restoring that replacement cannot silence, the run's own
+// results. The write is synchronous, so nothing is left queued at exit.
+function write(msg) {
+    fs.writeSync(1, msg);
 }
 
-function writeError(msg, callback) {
-    process.stderr.write(msg, callback);
+function writeError(msg) {
+    fs.writeSync(2, msg);
 }
 
 main().catch((error) => {
@@ -327,9 +334,8 @@ main().catch((error) => {
             ? `${ error.message }${ EOL }${ USAGE }${ EOL }`
             : `${ error.message }${ EOL }`;
 
-        writeError(message, () => {
-            process.exit(1);
-        });
+        writeError(message);
+        process.exitCode = 1;
 
         return;
     }

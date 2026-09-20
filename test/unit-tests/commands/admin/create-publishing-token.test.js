@@ -1,14 +1,15 @@
 import process from 'node:process';
 import { assert, assertEqual, assertMatches, assertUndefined } from 'kixx-assert';
-import { describe, MockTracker } from 'kixx-test';
+import { describe } from 'kixx-test';
 
 import AdminCreatePublishingTokenCommand from '../../../../commands/admin/create-publishing-token.js';
+import captureOutput from '../../helpers/capture-output.js';
 
 describe('AdminCreatePublishingTokenCommand', ({ it }) => {
     it('prints the one-time token, roles, description, and expiration', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         const command = makeCommand({
+            output,
             client: {
                 createPublishingApiToken: async () => ({
                     token: 'kxpat_secret',
@@ -20,20 +21,17 @@ describe('AdminCreatePublishingTokenCommand', ({ it }) => {
         });
 
         const code = await command.run({ environment: 'production' });
-        const output = stdout.mock.getCall(0).arguments[0];
+        const text = output.chunks[0];
 
         assertEqual(0, code);
-        assertMatches('kxpat_secret', output);
-        assertMatches('shown once', output);
-        assertMatches('app.environments.production.publishingToken', output);
-        assertMatches('editor', output);
-        assertMatches('CMS production deploy', output);
-        tracker.reset();
+        assertMatches('kxpat_secret', text);
+        assertMatches('shown once', text);
+        assertMatches('app.environments.production.publishingToken', text);
+        assertMatches('editor', text);
+        assertMatches('CMS production deploy', text);
     });
 
     it('omits roles, ttl, and description from the request when not supplied', async () => {
-        const tracker = new MockTracker();
-        tracker.method(process.stdout, 'write', () => true);
         const received = {};
         const command = makeCommand({
             client: {
@@ -49,7 +47,6 @@ describe('AdminCreatePublishingTokenCommand', ({ it }) => {
         assertUndefined(received.roles);
         assertUndefined(received.ttl);
         assertUndefined(received.description);
-        tracker.reset();
     });
 
     it('throws a UsageError naming the environment variable when stdin is not a TTY', async () => {
@@ -75,9 +72,10 @@ describe('AdminCreatePublishingTokenCommand', ({ it }) => {
 });
 
 function makeCommand(args) {
-    const { client } = args;
+    const { client, output = captureOutput() } = args;
 
     return new AdminCreatePublishingTokenCommand({
+        output,
         config: { app: { environments: { production: { origin: 'https://admin.example.test' } } } },
         createClient: () => client,
         promptForValue: async () => 'stub-value',

@@ -42,7 +42,7 @@ export default class AdminListMigrationsCommand {
 
         const migrations = await connection.client.listMigrations();
 
-        process.stdout.write(wrapText(renderMigrations(migrations)));
+        (this.#args.output ?? process.stdout).write(wrapText(renderMigrations(migrations)));
         return 0;
     }
 }

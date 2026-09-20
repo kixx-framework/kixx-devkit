@@ -39,7 +39,7 @@ export default class AppCreateReleaseCommand {
             provenance,
         });
 
-        process.stdout.write(wrapText(renderReleaseResult({ result, verbose: options?.verbose ?? false })));
+        (this.#args.output ?? process.stdout).write(wrapText(renderReleaseResult({ result, verbose: options?.verbose ?? false })));
         return 0;
     }
 }

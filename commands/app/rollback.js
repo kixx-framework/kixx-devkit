@@ -26,6 +26,8 @@ export default class AppRollbackCommand {
     }
 
     async run(options) {
+        const output = this.#args.output ?? process.stdout;
+
         const connection = resolvePublishingEnvironment({
             environment: options?.environment,
             config: this.#args.config,
@@ -44,7 +46,7 @@ export default class AppRollbackCommand {
         if (isList) {
             const releases = await connection.client.listReleases({ limit: 25 });
             const activations = await connection.client.getBuildActivations(buildId, { limit: 25 });
-            process.stdout.write(wrapText(renderHistory({ buildId, releases, activations })));
+            output.write(wrapText(renderHistory({ buildId, releases, activations })));
             return 0;
         }
 
@@ -54,9 +56,11 @@ export default class AppRollbackCommand {
             releaseId,
             reason: 'rollback',
         });
-        process.stdout.write(
-            wrapText(`Rolled back build ${ result.buildId } to Release ${ result.releaseId }.\n`),
-        );
+        output.write(wrapText([
+            `Rolled back build ${ result.buildId } to Release ${ result.releaseId }.`,
+            `Assignment: ${ result.assignmentId }`,
+            '',
+        ].join('\n')));
         return 0;
     }
 }
@@ -70,14 +74,33 @@ function requireValue(value, message) {
 
 function renderHistory(args) {
     const { buildId, releases, activations } = args;
-    const lines = [ `Build ${ buildId } activation history:` ];
+    const lines = [ `Build ${ buildId } activation history, newest first:` ];
+
+    if (activations.activations.length === 0) {
+        // Not an error. History is best-effort upstream, a no-op assignment
+        // records nothing, and the build pointer is the authority regardless.
+        lines.push('  (none recorded)');
+    }
+
     for (const entry of activations.activations) {
-        lines.push(`  ${ entry.releaseId } ${ entry.reason ?? ''}`.trimEnd());
+        // A first assignment has no predecessor; that is a state, not a gap.
+        const from = entry.fromReleaseId ?? '(first assignment)';
+        lines.push(`  ${ entry.activatedAt } ${ from } -> ${ entry.toReleaseId }`);
+        lines.push(`    reason ${ entry.reason ?? 'unknown' }; assignment ${ entry.assignmentId }`);
     }
-    lines.push('', 'Recent Releases:');
+
+    lines.push('', 'Recent Releases, newest first:');
+
+    if (releases.releases.length === 0) {
+        lines.push('  (none)');
+    }
+
     for (const release of releases.releases) {
-        lines.push(`  ${ release.releaseId }`);
+        // Print ids unabbreviated: an operator pastes one straight back into
+        // --release-id.
+        lines.push(`  ${ release.releaseId } ${ release.createdAt ?? '' }`.trimEnd());
     }
+
     lines.push('');
     return lines.join('\n');
 }

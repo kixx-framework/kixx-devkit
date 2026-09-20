@@ -1,37 +1,33 @@
-import process from 'node:process';
 import { assertEqual, assertMatches } from 'kixx-assert';
-import { describe, MockTracker } from 'kixx-test';
+import { describe } from 'kixx-test';
 import CloudflareReleaseCommand from '../../../../commands/cloudflare/release.js';
+import captureOutput from '../../helpers/capture-output.js';
 
 describe('CloudflareReleaseCommand', ({ it }) => {
     it('passes resolved clients and options to the release coordinator', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         let received;
         const command = makeCommand(async (options) => {
             received = options;
             return { outcome: 'resources-resolved', prepared: resourcesResolved() };
-        });
+        }, output);
 
         const exitCode = await command.run({ environment: 'production', force: true });
 
         assertEqual(0, exitCode);
         assertEqual(true, received.force);
         assertEqual('https://app.example.com', received.origin);
-        assertMatches('Traffic was unchanged', stdout.mock.getCall(2).arguments[0]);
-        tracker.reset();
+        assertMatches('Traffic was unchanged', output.chunks[2]);
     });
 
     it('warns in Worker preparation about undeclared secrets on the source version', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         const prepared = { ...resourcesResolved(), undeclaredSecretNames: [ 'OLD_SECRET' ] };
-        const command = makeCommand(async () => ({ outcome: 'resources-resolved', prepared }));
+        const command = makeCommand(async () => ({ outcome: 'resources-resolved', prepared }), output);
 
         await command.run({ environment: 'production' });
 
-        const text = stdout.mock.getCall(1).arguments[0];
-        tracker.reset();
+        const text = output.chunks[1];
         assertMatches('OLD_SECRET', text);
         assertMatches('do not inherit', text);
     });
@@ -49,8 +45,9 @@ describe('CloudflareReleaseCommand', ({ it }) => {
     });
 });
 
-function makeCommand(release) {
+function makeCommand(release, output = captureOutput()) {
     return new CloudflareReleaseCommand({
+        output,
         projectDirectory: '/app',
         cloudflareConfig: {},
         config: { app: { environments: { production: { origin: 'https://app.example.com' } } } },

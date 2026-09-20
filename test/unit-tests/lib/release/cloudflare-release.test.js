@@ -2,6 +2,8 @@ import { assertEqual } from 'kixx-assert';
 import { describe } from 'kixx-test';
 import releaseToCloudflare from '../../../../lib/release/cloudflare-release.js';
 
+const ASSIGNMENT_ID = '4a2f7b2e-6d1c-4f0a-9b83-1c5d7e9a0f21';
+
 describe('cloudflare-release', ({ it }) => {
     it('stages and verifies content before creating a version', async () => {
         const calls = [];
@@ -36,6 +38,32 @@ describe('cloudflare-release', ({ it }) => {
         assertEqual(true, result.created.deployed);
     });
 
+    it('stops when the staged pointer holds a different Release', async () => {
+        const calls = [];
+        const options = makeOptions({ calls, stagedReleaseId: 'someone-elses-release' });
+        const caught = await catchAsyncError(() => releaseToCloudflare(options));
+
+        assertEqual('release,assign-new,get-build', calls.join(','));
+        assertEqual(true, caught.message.includes('someone-elses-release'));
+        assertEqual(true, caught.message.includes('Traffic was unchanged'));
+    });
+
+    it('stops when the staged pointer holds a different assignment identity', async () => {
+        const calls = [];
+        const options = makeOptions({
+            calls,
+            stagedAssignmentId: '8f3c1d40-52ab-4e19-8d77-6b0e2a4c9153',
+        });
+
+        // Same Release, different act. Only the identity distinguishes a
+        // concurrent write that happened to land on the same Release.
+        const caught = await catchAsyncError(() => releaseToCloudflare(options));
+
+        assertEqual('release,assign-new,get-build', calls.join(','));
+        assertEqual(true, caught.message.includes('reassigned the pointer'));
+        assertEqual(true, caught.message.includes('Traffic was unchanged'));
+    });
+
     it('does not create a version when first assignment collides', async () => {
         const calls = [];
         const options = makeOptions({ calls });
@@ -56,7 +84,13 @@ describe('cloudflare-release', ({ it }) => {
 });
 
 function makeOptions(args) {
-    const { calls, outcome = 'prepared', deployOnCreate = false } = args;
+    const {
+        calls,
+        outcome = 'prepared',
+        deployOnCreate = false,
+        stagedReleaseId = 'release-id',
+        stagedAssignmentId = ASSIGNMENT_ID,
+    } = args;
     const prepared = {
         outcome,
         buildId: outcome === 'prepared' ? 'future-build' : null,
@@ -70,7 +104,7 @@ function makeOptions(args) {
         publishingClient: {
             async getBuild() {
                 calls.push('get-build');
-                return { releaseId: 'release-id' };
+                return { releaseId: stagedReleaseId, assignmentId: stagedAssignmentId };
             },
         },
         prepare: async () => prepared,
@@ -83,8 +117,14 @@ function makeOptions(args) {
             assertEqual(options.provenance.intendedForBuildId, outcome === 'prepared' ? 'future-build' : 'running-build');
             return { releaseId: 'release-id' };
         },
-        assignNew: async () => calls.push('assign-new'),
-        assign: async () => calls.push('assign'),
+        assignNew: async () => {
+            calls.push('assign-new');
+            return { buildId: 'future-build', releaseId: 'release-id', assignmentId: ASSIGNMENT_ID };
+        },
+        assign: async () => {
+            calls.push('assign');
+            return { buildId: 'running-build', releaseId: 'release-id', assignmentId: ASSIGNMENT_ID };
+        },
         createVersion: async () => {
             calls.push('create');
             return { ...prepared, outcome: 'created', versionId: 'version-id', deployed: deployOnCreate };
@@ -94,4 +134,13 @@ function makeOptions(args) {
             return { versionId: 'version-id' };
         },
     };
+}
+
+async function catchAsyncError(fn) {
+    try {
+        await fn();
+    } catch (error) {
+        return error;
+    }
+    throw new Error('Expected an error');
 }

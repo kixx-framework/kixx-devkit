@@ -374,7 +374,9 @@ main()
         }
     })
     .catch((error) => {
-        if (error.name === 'UsageError') {
+        // Match the class, not the name: subclasses such as
+        // UnsupportedServerError are also operator instructions, not crashes.
+        if (error instanceof UsageError) {
             // eslint-disable-next-line no-console
             console.error(wrapText(error.message));
         } else {

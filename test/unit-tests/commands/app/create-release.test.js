@@ -1,15 +1,15 @@
-import process from 'node:process';
 import { assertEqual } from 'kixx-assert';
-import { describe, MockTracker } from 'kixx-test';
+import { describe } from 'kixx-test';
 
 import AppCreateReleaseCommand from '../../../../commands/app/create-release.js';
+import captureOutput from '../../helpers/capture-output.js';
 
 describe('AppCreateReleaseCommand', ({ it }) => {
     it('creates a Release without accepting or assigning a build', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         let received;
         const command = new AppCreateReleaseCommand({
+            output,
             projectDirectory: '/app',
             config: {},
             secrets: {},
@@ -28,21 +28,19 @@ describe('AppCreateReleaseCommand', ({ it }) => {
         assertEqual(undefined, received.buildId);
         assertEqual('ship it', received.provenance.message);
         assertEqual('abc123', received.provenance.sourceRevision);
-        assertEqual(true, stdout.mock.getCall(0).arguments[0].includes('Release: release-id'));
-        tracker.reset();
+        assertEqual(true, output.chunks[0].includes('Release: release-id'));
     });
 
     it('dry-run prints no Release id', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         const command = new AppCreateReleaseCommand({
+            output,
             createApplicationRelease: async () => makeResult(true),
         });
 
         await command.run({ environment: 'production', 'dry-run': true });
 
-        assertEqual(false, stdout.mock.getCall(0).arguments[0].includes('Release:'));
-        tracker.reset();
+        assertEqual(false, output.chunks[0].includes('Release:'));
     });
 });
 

@@ -34,6 +34,10 @@ See [app.md](docs/app.md), [cloudflare.md](docs/cloudflare.md),
 [admin.md](docs/admin.md), and [configuration.md](docs/configuration.md) for
 usage and configuration.
 
+Publishing commands require an application serving Publishing API build
+assignment protocol 2 and addressing format 4. Older deployments are refused
+before any write; see [app.md](docs/app.md#server-requirement).
+
 Development
 -----------
 

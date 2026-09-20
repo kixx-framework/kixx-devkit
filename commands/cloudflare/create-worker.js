@@ -24,11 +24,13 @@ export default class CloudflareCreateWorkerCommand {
 
     #cloudflareConfig;
     #secrets;
+    #output;
 
     constructor(args) {
-        const { cloudflareConfig, secrets } = args ?? {};
+        const { cloudflareConfig, secrets, output = process.stdout } = args ?? {};
         this.#cloudflareConfig = cloudflareConfig;
         this.#secrets = secrets;
+        this.#output = output;
     }
 
     async run(options) {
@@ -48,7 +50,7 @@ export default class CloudflareCreateWorkerCommand {
 
         const worker = await client.createWorker(workerConfig);
 
-        process.stdout.write(`${ JSON.stringify(worker, null, 4) }\n`);
+        this.#output.write(`${ JSON.stringify(worker, null, 4) }\n`);
 
         return 0;
     }

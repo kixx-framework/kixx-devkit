@@ -1,10 +1,10 @@
-import process from 'node:process';
 import { assert, assertEqual, assertMatches } from 'kixx-assert';
-import { describe, MockTracker } from 'kixx-test';
+import { describe } from 'kixx-test';
 
 import CloudflareDeployVersionCommand, {
     renderDeploymentResult,
 } from '../../../../commands/cloudflare/deploy-version.js';
+import captureOutput from '../../helpers/capture-output.js';
 
 describe('CloudflareDeployVersionCommand', ({ it }) => {
     it('declares the environment, force, and optional version id', () => {
@@ -14,12 +14,12 @@ describe('CloudflareDeployVersionCommand', ({ it }) => {
     });
 
     it('wires both API clients into the guarded deployment', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         const cloudflareClient = {};
         const publishingClient = {};
         let received;
         const command = makeCommand({
+            output,
             cloudflareClient,
             publishingClient,
             deploy: async (options) => {
@@ -34,15 +34,14 @@ describe('CloudflareDeployVersionCommand', ({ it }) => {
         assertEqual(cloudflareClient, received.apiClient);
         assertEqual(publishingClient, received.publishingClient);
         assertEqual('version-id', received.versionId);
-        assertMatches('Deployed to 100% of traffic.', stdout.mock.getCall(0).arguments[0]);
-        tracker.reset();
+        assertMatches('Deployed to 100% of traffic.', output.chunks[0]);
     });
 
     it('force bypasses Publishing API client construction and reports it', async () => {
-        const tracker = new MockTracker();
-        const stdout = tracker.method(process.stdout, 'write', () => true);
+        const output = captureOutput();
         let createdPublishingClient = false;
         const command = makeCommand({
+            output,
             createPublishingClient: () => {
                 createdPublishingClient = true;
             },
@@ -52,8 +51,7 @@ describe('CloudflareDeployVersionCommand', ({ it }) => {
         await command.run({ environment: 'production', force: true }, 'version-id');
 
         assertEqual(false, createdPublishingClient);
-        assertMatches('guard bypassed with --force', stdout.mock.getCall(0).arguments[0]);
-        tracker.reset();
+        assertMatches('guard bypassed with --force', output.chunks[0]);
     });
 
     it('requires Publishing API settings unless forced', async () => {
@@ -77,6 +75,7 @@ describe('CloudflareDeployVersionCommand', ({ it }) => {
 
 function makeCommand(args) {
     const {
+        output = captureOutput(),
         cloudflareClient = {},
         publishingClient = {},
         createPublishingClient = () => publishingClient,
@@ -91,6 +90,7 @@ function makeCommand(args) {
     } = args ?? {};
 
     return new CloudflareDeployVersionCommand({
+        output,
         projectDirectory: '/app',
         cloudflareConfig: {
             environments: { production: { WORKER: { name: 'worker' } } },

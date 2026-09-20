@@ -146,7 +146,11 @@ constructor(args) {
 - `cloudflareConfig` — Default export of the project's `cloudflare-config.js`,
   or `undefined` for any command other than `cloudflare`.
 
-Commands which need no injected state can omit the constructor entirely.
+The runner passes nothing else. A command which writes results also accepts an
+`output` stream, defaulting to `process.stdout`, and any collaborator it wants
+a test to be able to replace — see the seams in
+`commands/cloudflare/set-secret.js`. A command which needs none of this can
+omit the constructor entirely.
 
 ### run()
 
@@ -158,7 +162,15 @@ async run(options, ...positionals) {}
 an integer to set the process exit code — `0` for success. A non-integer return
 leaves the exit code alone, which also means success.
 
-Write results to `process.stdout`. Pass human-readable text through
+Write results to the injected `output` stream rather than to `process.stdout`
+directly, so a test can read what was written without replacing a global.
+Default it in the constructor:
+
+```js
+const { output = process.stdout } = args ?? {};
+```
+
+Pass human-readable text through
 `wrapText()` from `lib/text-wrap.js` so it wraps at 80 columns; write
 machine-readable output, such as JSON or a bare token, unwrapped. Throw
 `UsageError` (from `lib/usage-error.js`) for anything the user can fix by

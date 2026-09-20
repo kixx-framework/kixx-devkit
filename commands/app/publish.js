@@ -3,6 +3,7 @@ import process from 'node:process';
 import assignRelease from '../../lib/publishing/assign-release.js';
 import defaultFileSystem from '../../lib/file-system.js';
 import publishContent from '../../lib/publishing/publish-content.js';
+import { UnsupportedServerError } from '../../lib/publishing/negotiate-capabilities.js';
 import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';
 import resolveRunningBuild from '../../lib/publishing/resolve-running-build.js';
 import scanContentSources from '../../lib/publishing/scan-content-sources.js';
@@ -100,6 +101,12 @@ export default class AppPublishCommand {
                     reason: 'publish',
                 });
             } catch (cause) {
+                // An incompatible server is refused before the assignment is
+                // attempted, so there is no half-finished publish to recover.
+                if (cause instanceof UnsupportedServerError) {
+                    throw cause;
+                }
+
                 // The Release already exists on the server at this point.
                 // Reporting only the assignment failure would hide that and
                 // strand the operator without the id needed to recover.

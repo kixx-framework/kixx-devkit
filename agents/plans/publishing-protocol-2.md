@@ -322,7 +322,7 @@ never become a confusing `412`.
 
 ### Task P2-3: Assign releases using observed assignment identities
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** P2-1, P2-2
 **Documentation:** `docs/kixx-publishing-api.md` workflows 1–4 and "Bootstrap"
 
@@ -370,16 +370,16 @@ actionable report when the pointer moved underneath it.
 
 **Acceptance criteria**
 
-- [ ] An assignment to an existing build quotes the `assignmentId` from the
+- [x] An assignment to an existing build quotes the `assignmentId` from the
       immediately preceding read, never a release id.
-- [ ] A `404 BuildNotFound` on the read produces `expectedAssignmentId: null`.
-- [ ] `assignReleaseToNewBuild()` performs no read and always sends `null`.
-- [ ] An incompatible server fails before the build read, with a negotiation
+- [x] A `404 BuildNotFound` on the read produces `expectedAssignmentId: null`.
+- [x] `assignReleaseToNewBuild()` performs no read and always sends `null`.
+- [x] An incompatible server fails before the build read, with a negotiation
       error rather than an assignment error.
-- [ ] A `412` produces a `BuildPointerConflictError` carrying intended and
+- [x] A `412` produces a `BuildPointerConflictError` carrying intended and
       observed pointer state, and no second write occurs.
-- [ ] A `412` whose diagnostic re-read also fails still reports the conflict.
-- [ ] A same-release assignment that passes its precondition succeeds and
+- [x] A `412` whose diagnostic re-read also fails still reports the conflict.
+- [x] A same-release assignment that passes its precondition succeeds and
       returns the preserved assignment identity.
 
 **Validation**
@@ -390,12 +390,42 @@ actionable report when the pointer moved underneath it.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Everything described above.
+- Current state: Complete. Every assignment path — publish, pre-stage,
+  rollback, explicit assign — negotiates, quotes an observed identity, and
+  stops with an actionable report on a conflict. The protocol 2 upgrade is now
+  functionally whole: P2-2's broken caller is fixed, and the tool can publish
+  to and assign on an upgraded server. P2-4 and P2-5 are presentation and
+  documentation only.
+- Remaining: Nothing in this task.
+- Decisions and discoveries:
+  - The conflict error attaches `buildId`, `intendedReleaseId`,
+    `expectedAssignmentId`, `observedReleaseId`, and `observedAssignmentId`
+    with `Object.defineProperties` after construction. `PublishingApiError`
+    owns transport fields only, and widening it for one caller would put
+    orchestration state in the transport layer.
+  - The diagnostic re-read is swallowed on failure and reported as
+    "unavailable". A failed second read must never replace the conflict the
+    operator actually needs to see.
+  - `commands/app/publish.js` now rethrows `UnsupportedServerError` instead of
+    wrapping it in `ReleaseAssignmentError`. That wrapper tells the operator a
+    Release was created but left unassigned; for a refused server nothing was
+    attempted, so the recovery hint would have been a lie. This is the one
+    command-file edit in this task, taken here because it is error
+    classification rather than output formatting.
+  - Negotiation in both exported functions costs no extra round trip on the
+    publish path: `publishContent()` already negotiated against the same
+    client, and `discover()` is memoized. On `app assign-build` and
+    `app rollback` it is one added request, which is the intended trade.
+  - The conflict report was rendered end to end and checked as operator text,
+    not only asserted on in tests.
+- Actual files changed:
+  - `lib/publishing/assign-release.js` — rewritten for assignment identities,
+    negotiation, and conflict diagnostics
+  - `commands/app/publish.js` — rethrow `UnsupportedServerError` unwrapped
+  - `test/unit-tests/lib/publishing/assign-release.test.js` — rewritten;
+    `assignReleaseToNewBuild()` now has its own top-level describe block
+- Validation run: `npm test` — linter clean, 566 tests pass, 0 disabled.
 - Blockers: None.
 
 ---

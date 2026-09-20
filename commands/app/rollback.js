@@ -26,6 +26,8 @@ export default class AppRollbackCommand {
     }
 
     async run(options) {
+        const output = this.#args.output ?? process.stdout;
+
         const connection = resolvePublishingEnvironment({
             environment: options?.environment,
             config: this.#args.config,
@@ -44,7 +46,7 @@ export default class AppRollbackCommand {
         if (isList) {
             const releases = await connection.client.listReleases({ limit: 25 });
             const activations = await connection.client.getBuildActivations(buildId, { limit: 25 });
-            process.stdout.write(wrapText(renderHistory({ buildId, releases, activations })));
+            output.write(wrapText(renderHistory({ buildId, releases, activations })));
             return 0;
         }
 
@@ -54,7 +56,7 @@ export default class AppRollbackCommand {
             releaseId,
             reason: 'rollback',
         });
-        process.stdout.write(wrapText([
+        output.write(wrapText([
             `Rolled back build ${ result.buildId } to Release ${ result.releaseId }.`,
             `Assignment: ${ result.assignmentId }`,
             '',

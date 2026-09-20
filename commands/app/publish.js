@@ -122,7 +122,7 @@ export default class AppPublishCommand {
             }
         }
 
-        process.stdout.write(wrapText(renderPublishResult({
+        (this.#args.output ?? process.stdout).write(wrapText(renderPublishResult({
             result: { ...result, buildId, assignmentId: assignment?.assignmentId },
             environment: connection.environment,
             origin: connection.origin,

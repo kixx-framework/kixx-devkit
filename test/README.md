@@ -241,6 +241,26 @@ For simple interaction tests, create a `MockTracker` inside the `it` and call
 objects. When a tracker or mocked object is shared by several tests, create it
 in the `describe` and reset it in `after`.
 
+Never mock a method on a global such as `process.stdout` or `globalThis.fetch`
+when the code under test offers a seam to inject the dependency instead. A test
+which fails throws before `tracker.reset()` runs, leaving the replacement
+installed for every test that follows, and for the test runner itself. Inject a
+stand-in and read what the subject wrote:
+
+```javascript
+import captureOutput from '../../helpers/capture-output.js';
+
+const output = captureOutput();
+const command = new SomeCommand({ output });
+
+await command.run({ environment: 'production' });
+
+assertMatches('Release: release-id', output.chunks[0]);
+```
+
+Helpers live in `test/unit-tests/helpers/`. The runner imports only `*.test.js`
+files, so a helper module is never collected as a suite.
+
 Useful mock APIs:
 
 - `tracker.fn(original?, implementation?, options?)` creates a mock function.

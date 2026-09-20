@@ -37,12 +37,14 @@ export default class CloudflareCreateWorkerVersionCommand {
     #projectDirectory;
     #cloudflareConfig;
     #secrets;
+    #output;
 
     constructor(args) {
-        const { projectDirectory, cloudflareConfig, secrets } = args ?? {};
+        const { projectDirectory, cloudflareConfig, secrets, output = process.stdout } = args ?? {};
         this.#projectDirectory = projectDirectory;
         this.#cloudflareConfig = cloudflareConfig;
         this.#secrets = secrets;
+        this.#output = output;
     }
 
     async run(options) {
@@ -68,17 +70,17 @@ export default class CloudflareCreateWorkerVersionCommand {
         });
 
         if (result.outcome === 'resources-resolved') {
-            process.stdout.write(wrapText(renderResourcesResolved(result, environment)));
+            this.#output.write(wrapText(renderResourcesResolved(result, environment)));
         } else if (result.outcome === 'skipped') {
-            process.stdout.write(wrapText(renderSkipped(result, previousState)));
+            this.#output.write(wrapText(renderSkipped(result, previousState)));
         } else {
             const newState = await readWorkerVersionState({ projectDirectory, environment, fileSystem });
             const relativeStateFilepath = path.relative(projectDirectory, result.stateFilepath);
-            process.stdout.write(wrapText(renderCreated(result, previousState, newState, relativeStateFilepath)));
+            this.#output.write(wrapText(renderCreated(result, previousState, newState, relativeStateFilepath)));
         }
 
         if (result.undeclaredSecretNames.length > 0) {
-            process.stdout.write(wrapText(renderUndeclaredSecrets(result.undeclaredSecretNames)));
+            this.#output.write(wrapText(renderUndeclaredSecrets(result.undeclaredSecretNames)));
         }
 
         return 0;

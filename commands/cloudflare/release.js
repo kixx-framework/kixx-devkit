@@ -72,6 +72,7 @@ export default class CloudflareReleaseCommand {
         });
 
         await renderResult(result, {
+            output: this.#args.output ?? process.stdout,
             projectDirectory: this.#args.projectDirectory,
             environment,
             origin: connection.origin,
@@ -84,6 +85,8 @@ export default class CloudflareReleaseCommand {
 }
 
 async function renderResult(result, context) {
+    const write = (text) => context.output.write(wrapText(text));
+
     write('Worker preparation\n------------------\n');
     if (result.prepared.undeclaredSecretNames.length > 0) {
         write(renderUndeclaredSecrets(result.prepared.undeclaredSecretNames));
@@ -135,6 +138,3 @@ async function renderResult(result, context) {
     }
 }
 
-function write(text) {
-    process.stdout.write(wrapText(text));
-}

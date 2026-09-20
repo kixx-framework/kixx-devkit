@@ -49,6 +49,8 @@ export default class AdminRunMigrationCommand {
             throw new UsageError('--cursor is only meaningful together with --dry-run');
         }
 
+        const output = this.#args.output ?? process.stdout;
+
         const email = await (this.#args.promptForValue ?? promptForValue)({
             envVar: 'KIXX_ADMIN_EMAIL',
             label: 'Admin email address',
@@ -83,12 +85,12 @@ export default class AdminRunMigrationCommand {
         if (!dryRun) {
             // Guards against a stale --environment value carried over from a
             // previous command, before issuing a request that mutates ledger state.
-            process.stdout.write(wrapText(`Running on ${ connection.environment } (${ connection.origin })\n`));
+            output.write(wrapText(`Running on ${ connection.environment } (${ connection.origin })\n`));
         }
 
         const result = await runBatch(connection.client, migrationId, { dryRun, force, cursor });
 
-        process.stdout.write(wrapText(renderResult(migrationId, connection.environment, result)));
+        output.write(wrapText(renderResult(migrationId, connection.environment, result)));
         return 0;
     }
 }

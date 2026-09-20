@@ -14,9 +14,16 @@ export default class GenSecretTokenCommand {
         },
     };
 
+    #output;
+
+    constructor(args) {
+        const { output = process.stdout } = args ?? {};
+        this.#output = output;
+    }
+
     run(options) {
         const token = generateSecretToken(options.prefix);
-        process.stdout.write(`${ token }\n`);
+        this.#output.write(`${ token }\n`);
         return 0;
     }
 }

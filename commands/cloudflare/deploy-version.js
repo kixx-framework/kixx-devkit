@@ -42,6 +42,7 @@ export default class CloudflareDeployVersionCommand {
     #config;
     #secrets;
     #fileSystem;
+    #output;
     #createCloudflareClient;
     #createPublishingClient;
     #deployCloudflareVersion;
@@ -53,6 +54,7 @@ export default class CloudflareDeployVersionCommand {
             config,
             secrets,
             fileSystem,
+            output = process.stdout,
             createCloudflareClient = (options) => new CloudflareApiClient(options),
             createPublishingClient = (options) => new PublishingAPIClient(options),
             deployCloudflareVersion: deploy = deployCloudflareVersion,
@@ -63,6 +65,7 @@ export default class CloudflareDeployVersionCommand {
         this.#config = config;
         this.#secrets = secrets;
         this.#fileSystem = fileSystem;
+        this.#output = output;
         this.#createCloudflareClient = createCloudflareClient;
         this.#createPublishingClient = createPublishingClient;
         this.#deployCloudflareVersion = deploy;
@@ -94,7 +97,7 @@ export default class CloudflareDeployVersionCommand {
             fileSystem: this.#fileSystem,
         });
 
-        process.stdout.write(wrapText(renderDeploymentResult(result)));
+        this.#output.write(wrapText(renderDeploymentResult(result)));
 
         return 0;
     }

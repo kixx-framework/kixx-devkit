@@ -1,4 +1,3 @@
-import process from 'node:process';
 import { describe, MockTracker } from 'kixx-test';
 import {
     assert,
@@ -6,6 +5,7 @@ import {
     assertMatches,
 } from 'kixx-assert';
 import CloudflareCreateWorkerCommand from '../../../../commands/cloudflare/create-worker.js';
+import captureOutput from '../../helpers/capture-output.js';
 
 
 describe('CloudflareCreateWorkerCommand', ({ it }) => {
@@ -43,13 +43,13 @@ describe('CloudflareCreateWorkerCommand', ({ it }) => {
             const fetchMock = tracker.method(globalThis, 'fetch', async () => {
                 return makeApiResponse({ success: true, result: worker });
             });
-            const stdoutMock = tracker.method(process.stdout, 'write', () => true);
+            const output = captureOutput();
             const command = makeCommand({
                 name: 'obsolete-top-level-name',
                 environments: {
                     production: { WORKER: workerConfig },
                 },
-            });
+            }, output);
 
             const exitCode = await command.run({ environment: 'production' });
 
@@ -59,13 +59,14 @@ describe('CloudflareCreateWorkerCommand', ({ it }) => {
                 JSON.stringify(workerConfig),
                 fetchMock.mock.getCall(0).arguments[1].body,
             );
-            assertEqual(`${ JSON.stringify(worker, null, 4) }\n`, stdoutMock.mock.getCall(0).arguments[0]);
+            assertEqual(`${ JSON.stringify(worker, null, 4) }\n`, output.chunks[0]);
         });
     });
 });
 
-function makeCommand(cloudflareConfig = { environments: {} }) {
+function makeCommand(cloudflareConfig = { environments: {} }, output = captureOutput()) {
     return new CloudflareCreateWorkerCommand({
+        output,
         cloudflareConfig,
         secrets: {
             cloudflare: {

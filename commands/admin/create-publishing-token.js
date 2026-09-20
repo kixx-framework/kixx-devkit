@@ -52,7 +52,7 @@ export default class AdminCreatePublishingTokenCommand {
             description: options?.description,
         });
 
-        process.stdout.write(wrapText(renderToken(token, connection.environment)));
+        (this.#args.output ?? process.stdout).write(wrapText(renderToken(token, connection.environment)));
         return 0;
     }
 }

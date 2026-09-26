@@ -17,9 +17,53 @@ kixx.js cloudflare create-worker --environment production
 `--environment` (`-e`) is required and selects
 `environments.<environment>.WORKER` in `cloudflare-config.js`.
 
-After creation, use `create-worker-version` to upload an undeployed version,
-or use `release` to stage application content and deploy a version as one
-release workflow.
+For a new environment, use `bootstrap` next. Existing environments use
+`create-worker-version` to upload an undeployed version or `release` to stage
+application content and deploy a version as one release workflow.
+
+## `bootstrap`
+
+Deploys the first Worker version and supplies its initial secret bindings:
+
+```sh
+kixx.js cloudflare bootstrap --environment production [dotenv-file]
+```
+
+The optional dotenv path defaults to `.env.production.secrets`. Its names must
+exactly match the active assignments in `example.env.secrets`; values are sent
+to Cloudflare as secret bindings and are never printed or written to state.
+
+Bootstrap exists to break the first-deployment dependency cycle. Cloudflare
+must deploy the version declaring a Durable Object before it provisions that
+object's namespace, while `cloudflare release` must contact the Publishing API
+before it can deploy. A new Worker has no Publishing API and no publishing
+token yet, so bootstrap deploys the ordinary application artifact directly.
+
+The command is available only while both local state and Cloudflare's Worker
+version list are empty. It has no force option and cannot initialize or repair
+an existing Worker. The deployed Worker serves its Admin and Publishing APIs,
+but serves no application content until the first `cloudflare release`.
+
+Run the initial deployment in this order:
+
+```sh
+kixx.js cloudflare create-worker -e production
+kixx.js cloudflare bootstrap -e production
+kixx.js admin accept-invite -e production
+kixx.js admin create-publishing-token -e production
+kixx.js cloudflare release -e production
+```
+
+Before bootstrap, put every declared Worker secret, including the generated
+`ADMIN_BOOTSTRAP_TOKEN`, in `.env.production.secrets`. After
+`create-publishing-token`, store the printed token at
+`app.environments.production.publishingToken` in `.kixx/secrets.json` before
+running release.
+
+If Cloudflare deploys the version but the local state write fails, the error
+prints the complete non-secret state JSON and its destination. Either save
+that JSON at the reported path, or delete the still-empty Worker and rerun
+`create-worker` followed by `bootstrap`.
 
 ## `create-worker-version`
 
@@ -57,8 +101,9 @@ example.env.secrets
 ```
 
 The plain environment file and secret declaration file are required. State is
-required once any secret is actively declared; the bootstrap exception is
-documented below. Normal builds never open `.env.<environment>.secrets`.
+required once any secret is actively declared; use the dedicated `bootstrap`
+command for a new environment. Normal builds never open
+`.env.<environment>.secrets`.
 
 #### `cloudflare-config.js`
 
@@ -330,7 +375,8 @@ is removed.
   `CONTENT_STORE.durableObjectClassName`.
 - `example.env` documents plain values. `example.env.secrets` declares remote
   secret names and also remains a copy-from template for local Node.js use.
-  Local secret values are never deployment inputs.
+  Local secret values are deployment inputs only for the initial `bootstrap`;
+  normal builds inherit remote values.
 
 At the time this document was written, packaging the sample entry succeeded
 and found 201 reachable modules. That count is descriptive rather than an
@@ -338,10 +384,12 @@ invariant; it changes as the sample application changes.
 
 ## Worker secrets
 
-Secret values are remote Worker-version state. These commands create an
-undeployed version, update `.kixx/cloudflare-state.<environment>.json` after
-Cloudflare succeeds, and never change traffic. Promote the result separately
-with `deploy-version` or create a later normal version that inherits it.
+Secret values are remote Worker-version state. The mutation commands below
+create an undeployed version, update
+`.kixx/cloudflare-state.<environment>.json` after Cloudflare succeeds, and
+never change traffic. Promote the result separately with `deploy-version` or
+create a later normal version that inherits it. The initial `bootstrap`
+command above is the one exception: it deploys the first version directly.
 
 Secret versions carry a `config-change-<unique ID>` tag and a
 `workers/message` naming the invoking command. The application `BUILD_ID`
@@ -397,24 +445,10 @@ Deletion requires reviewed declaration removal:
 The command refuses to delete a name that is still actively declared or that
 is not a secret binding on the recorded source version in Cloudflare.
 
-### Bootstrap and recovery
-
-The workflow requires an existing version state before it can inherit a
-declared secret. Bootstrap a new environment in this order:
-
-1. Create the Worker and leave every assignment in `example.env.secrets`
-   commented out.
-2. Run `create-worker-version`; with no state and no active declarations, it
-   creates the one permitted secret-free base and records its exact ID.
-3. Add the required declarations and commit them.
-4. Run `set-secret` or one additive `set-secrets` call covering every declared
-   name.
-5. Run `create-worker-version` or `release` so the normal artifact inherits
-   those values from the exact secret-bearing version.
+### Recovery
 
 For a project migrating to this workflow, retain the state from its last
-successful version upload and begin at step 3. Never fabricate a version ID or
-select `latest`.
+successful version upload. Never fabricate a version ID or select `latest`.
 
 If local state is missing, recover the complete
 `.kixx/cloudflare-state.<environment>.json` from the CI artifact or operator

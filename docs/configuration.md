@@ -112,14 +112,15 @@ assignment values are examples for local setup and are ignored by deployment
 code.
 
 `.env.<environment>.secrets` remains useful to the application during local
-Node.js development and is the default input to `cloudflare set-secrets` when
-explicitly rotating remote values. Normal `create-worker-version` and
-`release` commands never open it. They inherit each actively declared name
-from the exact Worker version recorded in
-`.kixx/cloudflare-state.<environment>.json`.
+Node.js development and is the default input to `cloudflare bootstrap` for a
+new environment and `cloudflare set-secrets` when explicitly rotating remote
+values. Normal `create-worker-version` and `release` commands never open it.
+They inherit each actively declared name from the exact Worker version
+recorded in `.kixx/cloudflare-state.<environment>.json`.
 
 Use `cloudflare set-secret`, `set-secrets`, and `delete-secret` to change
 remote values. Each produces an undeployed version; changing traffic remains
 an explicit `deploy-version` or `release` step. See
-[cloudflare.md](cloudflare.md#worker-secrets) for bootstrap, CI, deletion, and
+[cloudflare.md](cloudflare.md#bootstrap) for initial deployment and
+[Worker secrets](cloudflare.md#worker-secrets) for rotation, deletion, and
 stale-state recovery procedures.

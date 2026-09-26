@@ -736,6 +736,187 @@ describe('create-worker-version', ({ it }) => {
         assert(!Object.prototype.hasOwnProperty.call(fileSystem.written, STATE_FILEPATH), 'expected no state file written');
     });
 
+    it('bootstraps a pristine Worker with direct secrets and a deploying upload', async () => {
+        const sentinel = 'bootstrap-secret-sentinel';
+        const fileSystem = makeFileSystem({ [STATE_FILEPATH]: null });
+        let remoteVersions = [];
+        let isBootstrapped = false;
+        const apiClient = makeApiClient({
+            getWorker: () => isBootstrapped
+                ? deployedWorker([ 'ContentAddressableIndexStore' ])
+                : { id: 'worker-id', name: 'kixx-test-app' },
+            listWorkerVersions: () => remoteVersions,
+            createWorkerVersion: async () => {
+                remoteVersions = [ { id: 'bootstrap-version-id' } ];
+                isBootstrapped = true;
+                return { id: 'bootstrap-version-id' };
+            },
+        });
+        const cloudflareConfig = withContentStore(makeCloudflareConfig());
+
+        const result = await createWorkerVersion(runOptions({
+            apiClient,
+            fileSystem,
+            cloudflareConfig,
+            initialSecrets: { API_SECRET: sentinel },
+        }));
+        const call = apiClient.calls.createWorkerVersion[0];
+        const secretBinding = call.version.bindings.find((binding) => binding.name === 'API_SECRET');
+
+        assertEqual('created', result.outcome);
+        assertEqual(true, call.options.deploy);
+        assertEqual(true, result.deployed);
+        assertEqual('secret_text', secretBinding.type);
+        assertEqual(sentinel, secretBinding.text);
+        assert(
+            !call.version.bindings.some((binding) => binding.type === 'inherit'),
+            'expected no inherited binding in the bootstrap upload',
+        );
+        assertEqual('kixx.js cloudflare bootstrap', call.version.annotations['workers/triggered_by']);
+        assert(!JSON.stringify(result).includes(sentinel), 'expected no secret value in the created result');
+        assert(!fileSystem.written[STATE_FILEPATH].includes(sentinel), 'expected no secret value in state');
+
+        carryStateForward(fileSystem);
+        const next = await prepareWorkerVersion(runOptions({ apiClient, fileSystem, cloudflareConfig }));
+
+        assertEqual('skipped', next.outcome);
+        assertEqual(false, next.changes.modules);
+        assertEqual(false, next.changes.bindings);
+        assertEqual(false, next.changes.config);
+    });
+
+    it('rejects bootstrap when local state or any remote version exists', async () => {
+        const cases = [
+            {
+                fileSystem: makeFileSystem({}),
+                apiClient: makeApiClient({ listWorkerVersions: () => [] }),
+            },
+            {
+                fileSystem: makeFileSystem({ [STATE_FILEPATH]: null }),
+                apiClient: makeApiClient({ listWorkerVersions: () => [ { id: 'existing-version' } ] }),
+            },
+        ];
+
+        for (const entry of cases) {
+            const bundleModules = makeBundler('export default 1;');
+            const caught = await catchAsyncError(() => createWorkerVersion(runOptions({
+                ...entry,
+                bundleModules,
+                initialSecrets: { API_SECRET: 'sentinel' },
+            })));
+
+            assert(caught, 'expected a non-pristine Worker to be rejected');
+            assertEqual('UsageError', caught.name);
+            assert(caught.message.includes('only applies'), 'expected the bootstrap precondition');
+            assertEqual(0, bundleModules.callCount);
+            assertEqual(0, entry.apiClient.calls.createWorkerVersion.length);
+        }
+    });
+
+    it('rejects invalid initial secrets before bundling and names keys without values', async () => {
+        const cases = [
+            {
+                declarations: 'API_SECRET=example-only\nSECOND_SECRET=example-only\n',
+                secrets: { API_SECRET: 'one' },
+                name: 'SECOND_SECRET',
+            },
+            {
+                declarations: 'API_SECRET=example-only\n',
+                secrets: { API_SECRET: 'one', UNDECLARED: 'two' },
+                name: 'UNDECLARED',
+            },
+            {
+                declarations: 'BUILD_ID=example-only\n',
+                secrets: { BUILD_ID: 'reserved-value' },
+                name: 'BUILD_ID',
+            },
+            {
+                declarations: 'API_SECRET=example-only\n',
+                secrets: { API_SECRET: '' },
+                name: 'API_SECRET',
+            },
+            {
+                declarations: 'API_SECRET=example-only\n',
+                secrets: { API_SECRET: 42 },
+                name: 'API_SECRET',
+            },
+        ];
+
+        for (const entry of cases) {
+            const fileSystem = makeFileSystem({
+                [STATE_FILEPATH]: null,
+                [DECLARATIONS_FILEPATH]: entry.declarations,
+            });
+            const bundleModules = makeBundler('export default 1;');
+            const apiClient = makeApiClient({ listWorkerVersions: () => [] });
+            const caught = await catchAsyncError(() => createWorkerVersion(runOptions({
+                apiClient,
+                fileSystem,
+                bundleModules,
+                initialSecrets: entry.secrets,
+            })));
+
+            assert(caught, `expected ${ entry.name } to be rejected`);
+            assertEqual('UsageError', caught.name);
+            assert(caught.message.includes(entry.name), 'expected the invalid key name');
+            assert(!caught.message.includes('reserved-value'), 'expected no secret value in the error');
+            assertEqual(0, bundleModules.callCount);
+            assertEqual(0, apiClient.calls.createWorkerVersion.length);
+        }
+    });
+
+    it('returns resources-resolved during bootstrap without bundling or upload', async () => {
+        const cloudflareConfig = makeCloudflareConfig();
+        cloudflareConfig.environments.production.DOCUMENT_STORE.databaseId = null;
+        const bundleModules = makeBundler('export default 1;');
+        const fileSystem = makeFileSystem({ [STATE_FILEPATH]: null });
+        const apiClient = makeApiClient({
+            listWorkerVersions: () => [],
+            createD1Database: async () => ({ uuid: 'new-database-id' }),
+        });
+
+        const result = await createWorkerVersion(runOptions({
+            cloudflareConfig,
+            apiClient,
+            fileSystem,
+            bundleModules,
+            initialSecrets: { API_SECRET: 'sentinel' },
+        }));
+
+        assertEqual('resources-resolved', result.outcome);
+        assertEqual(0, bundleModules.callCount);
+        assertEqual(0, apiClient.calls.createWorkerVersion.length);
+    });
+
+    it('reports complete recovery state when the post-upload state write fails', async () => {
+        const sentinel = 'bootstrap-secret-sentinel';
+        const writeFailure = new Error('disk unavailable');
+        const fileSystem = makeFileSystem({ [STATE_FILEPATH]: null });
+        fileSystem.writeFile = async () => {
+            throw writeFailure;
+        };
+        const apiClient = makeApiClient({
+            listWorkerVersions: () => [],
+            createWorkerVersion: async () => ({ id: 'bootstrap-version-id' }),
+        });
+
+        const caught = await catchAsyncError(() => createWorkerVersion(runOptions({
+            apiClient,
+            fileSystem,
+            generateUniqueId: () => 'bootstrap-attempt',
+            initialSecrets: { API_SECRET: sentinel },
+        })));
+
+        assert(caught, 'expected the failed state write to be reported');
+        assertEqual(writeFailure, caught.cause);
+        assert(caught.message.includes('bootstrap-version-id'), 'expected the version ID');
+        assert(caught.message.includes('2026-08-29T16-49-32Z-bootstrap-attempt'), 'expected the BUILD_ID');
+        assert(caught.message.includes('Traffic changed: this version was deployed'), 'expected deployment status');
+        assert(caught.message.includes(STATE_FILEPATH), 'expected the state filepath');
+        assert(caught.message.includes('"bindingsHash"'), 'expected complete state JSON');
+        assert(!caught.message.includes(sentinel), 'expected no secret value in the error');
+    });
+
     it('prepares a frozen artifact without uploading or writing state', async () => {
         const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({});

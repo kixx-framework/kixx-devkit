@@ -75,7 +75,7 @@ and `release` gain the same diagnostic.
 
 ### Task CB-1: Build and deploy the first Worker version with initial secrets
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`, `agents/docs/code-documentation-guide.md`, `test/README.md`
 
@@ -132,22 +132,22 @@ files. Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] A pristine Worker receives one `createWorkerVersion` call with
+- [x] A pristine Worker receives one `createWorkerVersion` call with
   `deploy: true`, `secret_text` bindings for every declared secret, and no
   `inherit` bindings.
-- [ ] The recorded `bindingsHash` equals the hash a following normal
+- [x] The recorded `bindingsHash` equals the hash a following normal
   `prepareWorkerVersion()` computes against the written state, so that run
   returns `skipped`.
-- [ ] Existing local state or any remote version fails before bundling or
+- [x] Existing local state or any remote version fails before bundling or
   upload.
-- [ ] Missing, undeclared, reserved, empty, and non-string secrets fail before
+- [x] Missing, undeclared, reserved, empty, and non-string secrets fail before
   bundling and name keys only.
-- [ ] Missing D1/KV IDs return `resources-resolved` without an upload.
-- [ ] A state-write failure after upload reports version ID, `BUILD_ID`,
+- [x] Missing D1/KV IDs return `resources-resolved` without an upload.
+- [x] A state-write failure after upload reports version ID, `BUILD_ID`,
   deployment status, and state JSON.
-- [ ] One test passes sentinel secret values and asserts none appear in the
+- [x] One test passes sentinel secret values and asserts none appear in the
   result, written state, or thrown error messages.
-- [ ] Existing create-worker-version and release tests pass unchanged.
+- [x] Existing create-worker-version and release tests pass unchanged.
 
 **Validation**
 
@@ -156,19 +156,19 @@ files. Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the pristine bootstrap branch, exact initial-secret validation, direct secret upload bindings, unconditional deployment, bootstrap annotation, inherited-binding state hashing, and post-upload state-write recovery diagnostics. Added coverage for success, convergence, preconditions, invalid inputs, resource resolution, secret redaction, and state-write failure.
+- Current state: Complete. Every acceptance criterion is satisfied.
+- Remaining: None for CB-1. CB-2 may now consume `initialSecrets` through the CLI.
+- Decisions and discoveries: The created result omits the secret-bearing frozen artifact; preparation still returns it for the two-phase API. Bootstrap uses a placeholder inheritance version only for hashing, then state persistence rewrites it to the created version ID. The worktree was clean before implementation.
+- Actual files changed: `lib/cloudflare/create-worker-version.js`, `lib/cloudflare/manage-worker-secrets.js`, `test/unit-tests/lib/cloudflare/create-worker-version.test.js`, `agents/plans/cloudflare-bootstrap-command.md`.
+- Validation run: `node run-tests.js test/unit-tests/lib/cloudflare test/unit-tests/lib/release` passed 259 tests with 0 disabled; `npm run lint` passed; `git diff --check` passed.
 - Blockers: None.
 
 ---
 
 ### Task CB-2: Expose `cloudflare bootstrap` and document the first deployment
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** CB-1
 **Documentation:** `commands/README.md`, `agents/docs/code-style-guide.md`, `test/README.md`, `docs/cloudflare.md`, `docs/configuration.md`
 
@@ -216,11 +216,11 @@ files. Record the actual files changed in the handoff notes.
 
 **Acceptance criteria**
 
-- [ ] `kixx.js cloudflare --help` lists `bootstrap`.
-- [ ] Default and explicit dotenv paths resolve like `set-secrets`.
-- [ ] Output covers `resources-resolved` and `created`, and prints no secret
+- [x] `kixx.js cloudflare --help` lists `bootstrap`.
+- [x] Default and explicit dotenv paths resolve like `set-secrets`.
+- [x] Output covers `resources-resolved` and `created`, and prints no secret
   values.
-- [ ] Docs give an executable sequence: `create-worker`, `bootstrap`,
+- [x] Docs give an executable sequence: `create-worker`, `bootstrap`,
   `admin accept-invite`, `admin create-publishing-token`, `cloudflare release`.
 
 **Validation**
@@ -230,10 +230,10 @@ files. Record the actual files changed in the handoff notes.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: Added the `cloudflare bootstrap` adapter and registry metadata, dotenv path handling, two-phase preparation/creation wiring, resource-resolution and success output, next-step commands, CLI coverage, command listing, and the first-deployment runbook. Updated configuration documentation to identify bootstrap as the other consumer of the environment secrets file.
+- Current state: Complete. Every acceptance criterion is satisfied; both implementation tasks are complete.
+- Remaining: None.
+- Decisions and discoveries: Bootstrap reuses the existing resource and created-version renderers so its IDs, hashes, deployment status, and Durable Object reconciliation match other Cloudflare commands. It appends the three commands needed to establish the first admin, store a Publishing API token, and publish content. It loads no Publishing API credentials itself.
+- Actual files changed: `commands/cloudflare/bootstrap.js`, `commands/cloudflare/index.js`, `test/unit-tests/commands/cloudflare/bootstrap.test.js`, `README.md`, `docs/cloudflare.md`, `docs/configuration.md`, `agents/plans/cloudflare-bootstrap-command.md`.
+- Validation run: `node run-tests.js test/unit-tests/commands/cloudflare/bootstrap.test.js` passed 5 tests with 0 disabled; `node run-tests.js test/unit-tests/commands/cloudflare test/unit-tests/lib/cloudflare test/unit-tests/lib/release` passed 299 tests with 0 disabled; `node kixx.js cloudflare --help` and `node kixx.js cloudflare bootstrap --help` both succeeded and listed the command contract; `npm run lint` passed; `git diff --check` passed.
 - Blockers: None.

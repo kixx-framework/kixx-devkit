@@ -67,6 +67,26 @@ describe('worker-bindings', ({ it }) => {
         assert(!bindings.some((binding) => binding.type === 'r2_bucket'), 'expected no r2_bucket bindings');
     });
 
+    it('names a non-default bucket jurisdiction on the r2_bucket binding', () => {
+        const config = makeEnvironmentConfig();
+        config.OBJECT_STORE.buckets.assets.jurisdiction = 'eu';
+
+        const byName = groupByName(build({ environmentConfig: config }));
+
+        assertEqual('eu', byName.ASSET_BUCKET.jurisdiction);
+    });
+
+    it('produces an identical binding for an omitted and an explicit default jurisdiction', () => {
+        const explicit = makeEnvironmentConfig();
+        explicit.OBJECT_STORE.buckets.assets.jurisdiction = 'default';
+
+        const explicitBinding = groupByName(build({ environmentConfig: explicit })).ASSET_BUCKET;
+        const omittedBinding = groupByName(build({})).ASSET_BUCKET;
+
+        assertEqual(JSON.stringify(omittedBinding), JSON.stringify(explicitBinding));
+        assert(!Object.hasOwn(omittedBinding, 'jurisdiction'), 'expected no jurisdiction field');
+    });
+
     it('omits every config block independently', () => {
         const bindings = build({ environmentConfig: {}, envars: {}, secretNames: [] });
 

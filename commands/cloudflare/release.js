@@ -10,6 +10,7 @@ import UsageError from '../../lib/usage-error.js';
 import { renderReleaseResult } from '../app/publish.js';
 import {
     renderCreated,
+    renderProvisioned,
     renderResourcesResolved,
     renderSkipped,
     renderUndeclaredSecrets,
@@ -88,6 +89,10 @@ async function renderResult(result, context) {
     const write = (text) => context.output.write(wrapText(text));
 
     write('Worker preparation\n------------------\n');
+    const provisioned = renderProvisioned(result.prepared);
+    if (provisioned) {
+        write(provisioned);
+    }
     if (result.prepared.undeclaredSecretNames.length > 0) {
         write(renderUndeclaredSecrets(result.prepared.undeclaredSecretNames));
     }

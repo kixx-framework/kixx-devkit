@@ -636,6 +636,74 @@ describe('CloudflareAPIClient', ({ it }) => {
         assertMatches('requires a payload.name', caught.message);
     });
 
+    it('retrieves an R2 bucket without a jurisdiction header by default', async () => {
+        const requests = [];
+        const client = makeClient(async (url, init) => {
+            requests.push({ url, init });
+            return makeApiResponse({ success: true, result: { name: 'media' } });
+        });
+
+        const result = await client.getR2Bucket('media');
+
+        assertEqual('media', result.name);
+        assertEqual(
+            'https://api.cloudflare.com/client/v4/accounts/account-id/r2/buckets/media',
+            requests[0].url.href,
+        );
+        assertEqual('GET', requests[0].init.method);
+        assertEqual(undefined, requests[0].init.headers['cf-r2-jurisdiction']);
+    });
+
+    it('retrieves an R2 bucket within a named jurisdiction', async () => {
+        const requests = [];
+        const client = makeClient(async (url, init) => {
+            requests.push({ url, init });
+            return makeApiResponse({ success: true, result: { name: 'media' } });
+        });
+
+        await client.getR2Bucket('media', { jurisdiction: 'eu' });
+
+        assertEqual('eu', requests[0].init.headers['cf-r2-jurisdiction']);
+    });
+
+    it('creates an R2 bucket with creation options in the body and jurisdiction in a header', async () => {
+        const requests = [];
+        const client = makeClient(async (url, init) => {
+            requests.push({ url, init });
+            return makeApiResponse({ success: true, result: { name: 'media' } });
+        });
+
+        await client.createR2Bucket({
+            name: 'media',
+            jurisdiction: 'eu',
+            locationHint: 'weur',
+            storageClass: 'InfrequentAccess',
+        });
+
+        const { url, init } = requests[0];
+        const body = JSON.parse(init.body);
+        assertEqual('https://api.cloudflare.com/client/v4/accounts/account-id/r2/buckets', url.href);
+        assertEqual('POST', init.method);
+        assertEqual('application/json', init.headers['content-type']);
+        assertEqual('eu', init.headers['cf-r2-jurisdiction']);
+        assertEqual('media', body.name);
+        assertEqual('weur', body.locationHint);
+        assertEqual('InfrequentAccess', body.storageClass);
+        assert(!Object.hasOwn(body, 'jurisdiction'), 'expected jurisdiction only in the header');
+    });
+
+    it('requires a non-empty R2 bucket name', async () => {
+        const client = makeClient(async () => {
+            throw new Error('expected no request');
+        });
+
+        const getError = await catchAsyncError(() => client.getR2Bucket(''));
+        const createError = await catchAsyncError(() => client.createR2Bucket({ name: '' }));
+
+        assertMatches('requires a bucketName', getError.message);
+        assertMatches('requires a payload.name', createError.message);
+    });
+
     it('serializes a parameterized D1 query', async () => {
         await withMockTracker(async (tracker) => {
             const queryResult = [ { results: [ { id: 'one' } ], success: true } ];

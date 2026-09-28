@@ -240,17 +240,110 @@ describe('provision-resources', ({ it }) => {
         assertEqual(0, apiClient.calls.createD1Database.length);
     });
 
-    it('never calls an R2 method', async () => {
-        const apiClient = makeApiClient({
-            getD1Database: async () => ({ uuid: 'database-id' }),
-            getKVNamespace: async () => ({ id: 'namespace-id' }),
+    it('adopts an existing R2 bucket without creating or reporting it', async () => {
+        const apiClient = makeApiClient({});
+
+        const { resolved, createdBuckets } = await resolveResources({
+            environmentConfig: withBucket(makeEnvironmentConfig(), { locationHint: 'weur' }),
+            apiClient,
         });
 
-        await resolveResources({ environmentConfig: makeEnvironmentConfig(), apiClient });
+        assertEqual(0, resolved.length);
+        assertEqual(0, createdBuckets.length);
+        assertEqual('example-files', apiClient.calls.getR2Bucket[0].name);
+        assertEqual(0, apiClient.calls.createR2Bucket.length);
+    });
 
-        assert(!apiClient.createBucket, 'expected no R2 method on the client');
+    it('creates a missing R2 bucket with its creation options and reports it', async () => {
+        const apiClient = makeApiClient({ getR2Bucket: throwNotFound });
+        const environmentConfig = withBucket(makeEnvironmentConfig(), {
+            jurisdiction: 'eu',
+            locationHint: 'weur',
+            storageClass: 'InfrequentAccess',
+        });
+
+        const { resolved, createdBuckets } = await resolveResources({ environmentConfig, apiClient });
+
+        assertEqual(0, resolved.length);
+        assertEqual('eu', apiClient.calls.getR2Bucket[0].options.jurisdiction);
+        assertEqual(
+            JSON.stringify({
+                name: 'example-files',
+                jurisdiction: 'eu',
+                locationHint: 'weur',
+                storageClass: 'InfrequentAccess',
+            }),
+            JSON.stringify(apiClient.calls.createR2Bucket[0]),
+        );
+        assertEqual(1, createdBuckets.length);
+        assertEqual('OBJECT_STORE.buckets.files', createdBuckets[0].configPath);
+        assertEqual('example-files', createdBuckets[0].name);
+        assertEqual('eu', createdBuckets[0].jurisdiction);
+    });
+
+    it('adopts a bucket another run created between the lookup and the create', async () => {
+        const apiClient = makeApiClient({
+            getR2Bucket: throwNotFound,
+            createR2Bucket: async () => {
+                throw new CloudflareApiError('conflict', { status: 409, method: 'POST', url: 'x' });
+            },
+        });
+
+        const { createdBuckets } = await resolveResources({
+            environmentConfig: withBucket(makeEnvironmentConfig(), {}),
+            apiClient,
+        });
+
+        assertEqual(0, createdBuckets.length);
+    });
+
+    it('propagates a non-404 R2 lookup failure unchanged', async () => {
+        const authError = new CloudflareApiError('forbidden', { status: 403, method: 'GET', url: 'x' });
+        const apiClient = makeApiClient({
+            getR2Bucket: async () => {
+                throw authError;
+            },
+        });
+
+        const caught = await catchAsyncError(() => resolveResources({
+            environmentConfig: withBucket(makeEnvironmentConfig(), {}),
+            apiClient,
+        }));
+
+        assertEqual(authError, caught);
+        assertEqual(0, apiClient.calls.createR2Bucket.length);
+    });
+
+    it('rejects a malformed bucket entry before creating any resource', async () => {
+        const config = withBucket(makeEnvironmentConfig(), { jurisdiction: 'mars' });
+        config.DOCUMENT_STORE.databaseId = null;
+
+        const apiClient = makeApiClient({});
+
+        const caught = await catchAsyncError(() => resolveResources({ environmentConfig: config, apiClient }));
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('OBJECT_STORE.buckets.files.jurisdiction'), caught.message);
+        assertEqual(0, apiClient.calls.createD1Database.length);
+        assertEqual(0, apiClient.calls.getR2Bucket.length);
     });
 });
+
+function withBucket(config, options) {
+    config.OBJECT_STORE = {
+        type: 'r2_bucket',
+        buckets: {
+            files: { bindingName: 'OBJECT_STORE_FILES', bucketName: 'example-files', ...options },
+        },
+    };
+
+    return config;
+}
+
+async function throwNotFound() {
+    throw new CloudflareApiError('not found', { status: 404, method: 'GET', url: 'x' });
+}
 
 function makeEnvironmentConfig() {
     return {
@@ -273,6 +366,8 @@ function makeApiClient(implementations) {
         findKVNamespaceByName: [],
         createD1Database: [],
         createKVNamespace: [],
+        getR2Bucket: [],
+        createR2Bucket: [],
     };
 
     const client = {
@@ -305,6 +400,16 @@ function makeApiClient(implementations) {
             return implementations.createKVNamespace
                 ? implementations.createKVNamespace(payload)
                 : { id: 'created-namespace-id' };
+        },
+        // The default is "the bucket exists", the common case on every run
+        // after the first.
+        async getR2Bucket(name, options) {
+            calls.getR2Bucket.push({ name, options });
+            return implementations.getR2Bucket ? implementations.getR2Bucket(name, options) : { name };
+        },
+        async createR2Bucket(payload) {
+            calls.createR2Bucket.push(payload);
+            return implementations.createR2Bucket ? implementations.createR2Bucket(payload) : { name: payload.name };
         },
     };
 

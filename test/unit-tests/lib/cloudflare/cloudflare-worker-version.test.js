@@ -144,6 +144,27 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
             assertEqual('META', bindings[7].name);
         });
 
+        it('carries an r2_bucket jurisdiction only when one is given', () => {
+            const version = makeVersion();
+
+            version.addBinding({ type: 'r2_bucket', name: 'EU_MEDIA', bucket_name: 'media', jurisdiction: 'eu' });
+            version.addBinding({ type: 'r2_bucket', name: 'MEDIA', bucket_name: 'media' });
+
+            const [ euBinding, defaultBinding ] = version.toJSON().bindings;
+
+            assertEqual('eu', euBinding.jurisdiction);
+            assert(!Object.hasOwn(defaultBinding, 'jurisdiction'), 'expected no jurisdiction key');
+        });
+
+        it('rejects an empty r2_bucket jurisdiction', () => {
+            const caught = catchError(() => {
+                return makeVersion().addBinding({ type: 'r2_bucket', name: 'MEDIA', bucket_name: 'media', jurisdiction: '' });
+            });
+
+            assert(caught, 'expected an empty jurisdiction to be rejected');
+            assertMatches('jurisdiction must be a non-empty string', caught.message);
+        });
+
         it('rejects an unsupported binding type and names the supported ones', () => {
             const caught = catchError(() => makeVersion().addBinding({ type: 'ai', name: 'AI' }));
 

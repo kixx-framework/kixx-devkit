@@ -10,6 +10,9 @@ export const subcommands = {
     'create-worker': {
         description: 'Create a new Worker from scratch',
     },
+    'update-worker': {
+        description: 'Replace an existing Worker\'s Worker-level configuration',
+    },
     'create-worker-version': {
         description: 'Bundle, hash, and idempotently upload a Cloudflare Worker version',
     },

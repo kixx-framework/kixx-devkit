@@ -21,6 +21,25 @@ For a new environment, use `bootstrap` next. Existing environments use
 `create-worker-version` to upload an undeployed version or `release` to stage
 application content and deploy a version as one release workflow.
 
+## `update-worker`
+
+Replaces an existing Worker's Worker-level configuration with the selected
+environment's `WORKER` block. It does not create a version, deploy, or touch
+local state.
+
+```sh
+kixx.js cloudflare update-worker --environment production
+```
+
+`--environment` (`-e`) is required and selects
+`environments.<environment>.WORKER`. `WORKER.name` identifies the Worker to
+update; this command cannot rename a Worker.
+
+**This is a full replacement, not a patch.** Cloudflare resets any optional
+property omitted from `WORKER` to its default. Keep the complete desired
+Worker-level configuration (for example `observability`, `logpush`, `tags`,
+and `subdomain`) in `WORKER`.
+
 ## `bootstrap`
 
 Deploys the first Worker version and supplies its initial secret bindings:
@@ -127,8 +146,8 @@ export default {
 
 `WORKER.name` identifies the existing Cloudflare Worker. `WORKER_VERSION`
 provides version-level runtime configuration. Worker-level settings such as
-observability, logpush, and the workers.dev subdomain belong to `create-worker`
-and are not updated here.
+observability, logpush, and the workers.dev subdomain belong to `WORKER` and
+are applied by `create-worker` or `update-worker`, not here.
 
 `WORKER_VERSION` accepts exactly five keys: `compatibility_date`,
 `compatibility_flags`, `limits`, `placement`, and `cache_options`. Any other

@@ -17,7 +17,8 @@ kixx.js cloudflare create-worker --environment production
 `--environment` (`-e`) is required and selects
 `environments.<environment>.WORKER` in `cloudflare-config.js`.
 
-For a new environment, use `bootstrap` next. Existing environments use
+A new environment does not need this command: `bootstrap` creates a missing
+Worker from the same `WORKER` block. Existing environments use
 `create-worker-version` to upload an undeployed version or `release` to stage
 application content and deploy a version as one release workflow.
 
@@ -42,7 +43,8 @@ and `subdomain`) in `WORKER`.
 
 ## `bootstrap`
 
-Deploys the first Worker version and supplies its initial secret bindings:
+Creates the Worker when it does not exist, then deploys its first version with
+initial secret bindings:
 
 ```sh
 kixx.js cloudflare bootstrap --environment production [dotenv-file]
@@ -63,10 +65,18 @@ version list are empty. It has no force option and cannot initialize or repair
 an existing Worker. The deployed Worker serves its Admin and Publishing APIs,
 but serves no application content until the first `cloudflare release`.
 
+A missing Worker is created from `environments.<environment>.WORKER`, as
+`create-worker` would, after the secrets file and local state pass validation.
+An existing Worker with no versions is used as it is; its Worker-level settings
+are not compared or updated. Use `update-worker` for that. Like every
+version-building command, bootstrap also provisions configured D1, KV, and R2
+resources (see [phase 3](#3-provision-resources)). When it stops to report
+new D1 or KV IDs, record them and run bootstrap again. The Worker it created
+has no versions yet, so the rerun proceeds.
+
 Run the initial deployment in this order:
 
 ```sh
-kixx.js cloudflare create-worker -e production
 kixx.js cloudflare bootstrap -e production
 kixx.js admin accept-invite -e production
 kixx.js admin create-publishing-token -e production
@@ -81,16 +91,15 @@ running release.
 
 If Cloudflare deploys the version but the local state write fails, the error
 prints the complete non-secret state JSON and its destination. Either save
-that JSON at the reported path, or delete the still-empty Worker and rerun
-`create-worker` followed by `bootstrap`.
+that JSON at the reported path, or delete the Worker and rerun `bootstrap`.
 
 ## `create-worker-version`
 
 Packages a Kixx application as a Cloudflare Worker version and uploads it
 undeployed when its inputs changed.
 
-It does not create the Worker itself. Use `create-worker` before this command
-when the configured Worker does not exist.
+It does not create the Worker itself. For a new environment, use `bootstrap`;
+otherwise use `create-worker` when the configured Worker does not exist.
 
 ```sh
 kixx.js cloudflare create-worker-version --environment production
@@ -104,8 +113,9 @@ Options:
 | `--force` | Upload another version even when the recorded inputs are unchanged. |
 
 The configured API token must be able to inspect the Worker and its configured
-resources, create Worker versions, and create any D1 database or KV namespace
-whose ID is not yet configured.
+resources, create Worker versions, create any D1 database or KV namespace
+whose ID is not yet configured, and read and create R2 buckets. `bootstrap`
+also needs permission to create a Worker.
 
 ### Project inputs
 
@@ -166,8 +176,28 @@ Optional application resource blocks produce bindings:
 | `CONTENT_STORE` | KV namespace and Durable Object namespace |
 | `OBJECT_STORE.buckets` | One R2 binding per bucket |
 
-The command verifies configured D1 and KV IDs. It does not verify or create R2
-buckets.
+Each `OBJECT_STORE.buckets` entry takes a required `bindingName` and
+`bucketName`, plus three optional keys:
+
+```js
+OBJECT_STORE: {
+    type: 'r2_bucket',
+    buckets: {
+        files: {
+            bucketName: 'example-files',
+            bindingName: 'OBJECT_STORE_FILES',
+            jurisdiction: 'eu',            // default, eu, or fedramp
+            locationHint: 'weur',          // used only when creating the bucket
+            storageClass: 'Standard',      // used only when creating the bucket
+        },
+    },
+},
+```
+
+`jurisdiction` is part of a bucket's address: lookup, creation, and the
+Worker binding all name it. Omitting it and setting `default` are equivalent.
+Cloudflare validates `locationHint` and `storageClass` when it creates the bucket.
+The command does not compare them against an existing bucket.
 
 #### Environment files
 
@@ -209,7 +239,8 @@ the selected environment before parsing the option.
 #### 2. Inspect the Worker and source version
 
 The command fetches `WORKER.name` from Cloudflare. A missing Worker produces a
-usage error naming the `create-worker` command to run.
+usage error naming the `create-worker` command to run. Only `bootstrap`
+creates a missing Worker here instead.
 
 The Worker record also tells the command:
 
@@ -231,7 +262,10 @@ name does not. A missing secret fails with the names to set using
 `set-secrets`. Secrets on the source version that `example.env.secrets` does
 not declare produce a warning: built versions do not inherit them.
 
-#### 3. Resolve D1 and KV resources
+#### 3. Provision resources
+
+This phase runs on every `create-worker-version`, `release`, and `bootstrap`,
+before the upload decision, so it runs even when no version is uploaded.
 
 For each configured D1 database or KV namespace:
 
@@ -239,10 +273,17 @@ For each configured D1 database or KV namespace:
 - A missing ID is resolved by resource name. An existing resource is adopted;
   otherwise the resource is created.
 
-When any ID is resolved, the command prints every resolved configuration path
-and ID, then stops without bundling or creating a version. The developer must
-put those IDs in `cloudflare-config.js` and run the command again. The command
-does not rewrite executable configuration files.
+For each `OBJECT_STORE.buckets` entry, the bucket is looked up by name and
+jurisdiction. An existing bucket is adopted; otherwise it is created with the
+entry's `locationHint` and `storageClass`. R2 buckets have no ID to record, so
+creating one does not stop the run. The output names each created bucket.
+
+Bucket entries are validated before any resource is created.
+
+When any D1 or KV ID is resolved, the command prints every resolved
+configuration path and ID, then stops without bundling or creating a version.
+The developer must put those IDs in `cloudflare-config.js` and run the command
+again. The command does not rewrite executable configuration files.
 
 Resolving by name makes this provisioning phase repeatable if a run is
 interrupted or the reported IDs have not yet been recorded.

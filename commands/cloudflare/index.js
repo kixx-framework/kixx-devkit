@@ -2,7 +2,7 @@ export const description = 'Tools for working directly with Cloudflare';
 
 export const subcommands = {
     bootstrap: {
-        description: 'Deploy the first Worker version with initial secrets',
+        description: 'Create the Worker when missing and deploy its first version with initial secrets',
     },
     'recover-secret-version': {
         description: 'Verify an explicit secret-only Worker version and recover its local state',

@@ -66,6 +66,26 @@ describe('CloudflareBootstrapCommand', ({ it }) => {
         assert(!output.text.includes('secret-sentinel'), 'expected no secret value in output');
     });
 
+    it('reports a created Worker and bucket even when resolution stops the run', async () => {
+        const output = makeOutput();
+        const command = makeCommand({
+            calls: [],
+            output,
+            outcome: 'resources-resolved',
+            provisioned: {
+                workerName: 'example-worker',
+                workerCreated: true,
+                createdBuckets: [ { configPath: 'OBJECT_STORE.buckets.files', name: 'example-files' } ],
+            },
+        });
+
+        await command.run({ environment: 'production' });
+
+        assert(output.text.includes('Created Worker "example-worker"'), output.text);
+        assert(output.text.includes('Created R2 bucket "example-files"'), output.text);
+        assert(output.text.includes('No version was created.'), output.text);
+    });
+
     it('rejects a missing environment and extra positionals before reading secrets', async () => {
         const calls = [];
         const command = makeCommand({ calls, output: makeOutput() });
@@ -82,7 +102,7 @@ describe('CloudflareBootstrapCommand', ({ it }) => {
 });
 
 function makeCommand(args) {
-    const { calls, output, outcome = 'prepared' } = args;
+    const { calls, output, outcome = 'prepared', provisioned } = args;
     const fileSystem = {};
     const apiClient = {};
     const prepared = outcome === 'resources-resolved'
@@ -93,6 +113,7 @@ function makeCommand(args) {
                 id: 'database-id',
                 created: true,
             } ],
+            ...provisioned,
         }
         : makePrepared();
 

@@ -2,6 +2,7 @@ import { describe } from 'kixx-test';
 import { assert, assertEqual } from 'kixx-assert';
 import {
     renderCreated,
+    renderProvisioned,
     renderSkipped,
     renderUndeclaredSecrets,
 } from '../../../../commands/cloudflare/create-worker-version.js';
@@ -33,6 +34,27 @@ describe('create-worker-version output', ({ describe }) => {
             assert(text.includes('Nothing changed since version previous-version-id'), text);
             assert(text.includes('--force'), text);
             assert(!text.includes('Durable Objects'), 'expected no Durable Object noise');
+        });
+    });
+
+    describe('renderProvisioned()', ({ it }) => {
+        it('names a created Worker and each created bucket with its config path', () => {
+            const text = renderProvisioned({
+                workerName: 'kixx-test-app',
+                workerCreated: true,
+                createdBuckets: [
+                    { configPath: 'OBJECT_STORE.buckets.files', name: 'files', jurisdiction: undefined },
+                    { configPath: 'OBJECT_STORE.buckets.eu', name: 'eu-files', jurisdiction: 'eu' },
+                ],
+            });
+
+            assert(text.includes('Created Worker "kixx-test-app"'), text);
+            assert(text.includes('Created R2 bucket "files" for OBJECT_STORE.buckets.files'), text);
+            assert(text.includes('Created R2 bucket "eu-files" in jurisdiction eu for OBJECT_STORE.buckets.eu'), text);
+        });
+
+        it('prints nothing when nothing was created', () => {
+            assertEqual('', renderProvisioned({ workerCreated: false, createdBuckets: [] }));
         });
     });
 

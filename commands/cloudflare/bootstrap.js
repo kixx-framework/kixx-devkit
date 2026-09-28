@@ -9,7 +9,7 @@ import { readEnvValues } from '../../lib/env-file.js';
 import defaultFileSystem from '../../lib/file-system.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { renderCreated, renderResourcesResolved } from './create-worker-version.js';
+import { renderCreated, renderProvisioned, renderResourcesResolved } from './create-worker-version.js';
 import { subcommands } from './index.js';
 
 export default class CloudflareBootstrapCommand {
@@ -73,6 +73,8 @@ export default class CloudflareBootstrapCommand {
             fileSystem,
         });
         const output = this.#args.output ?? process.stdout;
+
+        output.write(wrapText(renderProvisioned(prepared)));
 
         if (prepared.outcome === 'resources-resolved') {
             output.write(wrapText(renderResourcesResolved(prepared, environment)));

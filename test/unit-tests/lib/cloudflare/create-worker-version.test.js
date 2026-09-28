@@ -39,6 +39,7 @@ describe('create-worker-version', ({ it }) => {
         assertEqual('UsageError', caught.name);
         assert(caught.message.includes('create-worker'), 'expected the message to name the create-worker command');
         assertEqual(0, apiClient.calls.getKVNamespace.length);
+        assertEqual(0, apiClient.calls.createWorker.length);
     });
 
     it('returns resources-resolved and never bundles, uploads, or writes state', async () => {
@@ -785,6 +786,76 @@ describe('create-worker-version', ({ it }) => {
         assertEqual(false, next.changes.config);
     });
 
+    it('creates a missing Worker from its WORKER configuration during bootstrap', async () => {
+        const fileSystem = makeFileSystem({ [STATE_FILEPATH]: null });
+        const cloudflareConfig = makeCloudflareConfig();
+        cloudflareConfig.environments.production.WORKER.logpush = false;
+        const apiClient = makeApiClient({ getWorker: throwNotFound });
+
+        const result = await createWorkerVersion(runOptions({
+            apiClient,
+            fileSystem,
+            cloudflareConfig,
+            initialSecrets: { API_SECRET: 'sentinel' },
+        }));
+
+        assertEqual('created', result.outcome);
+        assertEqual(true, result.workerCreated);
+        assertEqual('kixx-test-app', apiClient.calls.createWorker[0].name);
+        assertEqual(false, apiClient.calls.createWorker[0].logpush);
+        // A Worker created by this call has no versions to look for.
+        assertEqual(0, apiClient.calls.listWorkerVersions.length);
+    });
+
+    it('reports an existing Worker as not created during bootstrap', async () => {
+        const apiClient = makeApiClient({ listWorkerVersions: () => [] });
+
+        const result = await createWorkerVersion(runOptions({
+            apiClient,
+            fileSystem: makeFileSystem({ [STATE_FILEPATH]: null }),
+            initialSecrets: { API_SECRET: 'sentinel' },
+        }));
+
+        assertEqual(false, result.workerCreated);
+        assertEqual(0, apiClient.calls.createWorker.length);
+    });
+
+    it('creates no Worker when bootstrap input fails local validation', async () => {
+        const cases = [
+            { fileSystem: makeFileSystem({ [STATE_FILEPATH]: null }), initialSecrets: {} },
+            { fileSystem: makeFileSystem({}), initialSecrets: { API_SECRET: 'sentinel' } },
+        ];
+
+        for (const entry of cases) {
+            const apiClient = makeApiClient({ getWorker: throwNotFound });
+            const caught = await catchAsyncError(() => createWorkerVersion(runOptions({ ...entry, apiClient })));
+
+            assert(caught, 'expected invalid bootstrap input to be rejected');
+            assertEqual('UsageError', caught.name);
+            assertEqual(0, apiClient.calls.getWorker.length);
+            assertEqual(0, apiClient.calls.createWorker.length);
+        }
+    });
+
+    it('carries created R2 buckets into every outcome', async () => {
+        const cloudflareConfig = makeCloudflareConfig();
+        cloudflareConfig.environments.production.OBJECT_STORE = {
+            type: 'r2_bucket',
+            buckets: { files: { bindingName: 'FILES', bucketName: 'kixx-test-files' } },
+        };
+        const apiClient = makeApiClient({ getR2Bucket: throwNotFound });
+
+        const prepared = await prepareWorkerVersion(runOptions({ apiClient, cloudflareConfig }));
+
+        cloudflareConfig.environments.production.DOCUMENT_STORE.databaseId = null;
+        const resolved = await prepareWorkerVersion(runOptions({ apiClient, cloudflareConfig }));
+
+        assertEqual('prepared', prepared.outcome);
+        assertEqual('kixx-test-files', prepared.createdBuckets[0].name);
+        assertEqual('resources-resolved', resolved.outcome);
+        assertEqual('kixx-test-files', resolved.createdBuckets[0].name);
+    });
+
     it('rejects bootstrap when local state or any remote version exists', async () => {
         const cases = [
             {
@@ -959,6 +1030,10 @@ function deployedWorker(classNames) {
     };
 }
 
+async function throwNotFound() {
+    throw new CloudflareApiError('not found', { status: 404, method: 'GET', url: 'x' });
+}
+
 // Moves the state a run just wrote back to where the next run reads it, so the
 // next run compares against it instead of treating everything as changed.
 function carryStateForward(fileSystem) {
@@ -1085,6 +1160,9 @@ function makeBaseState() {
 function makeApiClient(implementations) {
     const calls = {
         getWorker: [],
+        createWorker: [],
+        getR2Bucket: [],
+        createR2Bucket: [],
         getKVNamespace: [],
         getD1Database: [],
         findKVNamespaceByName: [],
@@ -1102,6 +1180,18 @@ function makeApiClient(implementations) {
         async getWorker(name) {
             calls.getWorker.push(name);
             return implementations.getWorker ? implementations.getWorker(name) : { id: 'worker-id', name };
+        },
+        async createWorker(payload) {
+            calls.createWorker.push(payload);
+            return { id: 'worker-id', name: payload.name, deployed_on: null };
+        },
+        async getR2Bucket(name, options) {
+            calls.getR2Bucket.push({ name, options });
+            return implementations.getR2Bucket ? implementations.getR2Bucket(name, options) : { name };
+        },
+        async createR2Bucket(payload) {
+            calls.createR2Bucket.push(payload);
+            return { name: payload.name };
         },
         async getKVNamespace(id) {
             calls.getKVNamespace.push(id);

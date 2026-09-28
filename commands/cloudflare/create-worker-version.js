@@ -69,6 +69,8 @@ export default class CloudflareCreateWorkerVersionCommand {
             fileSystem,
         });
 
+        this.#output.write(wrapText(renderProvisioned(result)));
+
         if (result.outcome === 'resources-resolved') {
             this.#output.write(wrapText(renderResourcesResolved(result, environment)));
         } else if (result.outcome === 'skipped') {
@@ -110,6 +112,23 @@ export function renderUndeclaredSecrets(names) {
         'Built versions do not inherit them.',
         '',
     ].join('\n');
+}
+
+// Created resources are reported whatever the outcome, because they exist in
+// Cloudflare even when the run stops before uploading a version.
+export function renderProvisioned(result) {
+    const lines = [];
+
+    if (result.workerCreated) {
+        lines.push(`Created Worker "${ result.workerName }"`);
+    }
+
+    for (const bucket of result.createdBuckets ?? []) {
+        const where = bucket.jurisdiction ? ` in jurisdiction ${ bucket.jurisdiction }` : '';
+        lines.push(`Created R2 bucket "${ bucket.name }"${ where } for ${ bucket.configPath }`);
+    }
+
+    return lines.length > 0 ? `${ lines.join('\n') }\n\n` : '';
 }
 
 export function renderResourcesResolved(result, environment) {

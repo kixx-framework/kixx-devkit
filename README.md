@@ -17,6 +17,7 @@ Available workflows:
 - `kixx.js app publish` — create and assign application content.
 - `kixx.js app rollback` — inspect or restore a build's content history.
 - `kixx.js cloudflare create-worker` — create a Cloudflare Worker.
+- `kixx.js cloudflare update-worker` — replace a Worker's Worker-level configuration.
 - `kixx.js cloudflare bootstrap` — deploy the first Worker version with initial secrets.
 - `kixx.js cloudflare create-worker-version` — upload an undeployed Worker version.
 - `kixx.js cloudflare set-secret` — create an undeployed version with one secret changed.

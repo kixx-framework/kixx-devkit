@@ -14,7 +14,7 @@ their defaults. The `WORKER` block is declarative desired state, shared with
 
 ### Task UW-1: Add the `update-worker` command
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `commands/README.md`; `docs/cloudflare.md`; `test/README.md`
 
@@ -50,12 +50,12 @@ Operators can replace an existing Worker's Worker-level settings from
 
 **Acceptance criteria**
 
-- [ ] Missing `--environment` or `WORKER` block fails with a `UsageError`
+- [x] Missing `--environment` or `WORKER` block fails with a `UsageError`
       before any request.
-- [ ] A valid run sends one `PUT` to the Worker named by `WORKER.name` with the
+- [x] A valid run sends one `PUT` to the Worker named by `WORKER.name` with the
       `WORKER` block as its body, prints the result as four-space JSON plus a
       newline, and returns `0`.
-- [ ] Docs warn that omitted `WORKER` fields reset to Cloudflare defaults and
+- [x] Docs warn that omitted `WORKER` fields reset to Cloudflare defaults and
       give a few example Worker-level fields (`observability`, `logpush`,
       `subdomain`).
 
@@ -68,11 +68,15 @@ Operators can replace an existing Worker's Worker-level settings from
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
+- Completed: Everything described above.
+- Current state: Complete.
+- Remaining: Nothing. The user verified the command manually.
 - Decisions and discoveries: `updateWorker()` and its HTTP test already exist;
-  reuse them.
-- Actual files changed: None yet.
-- Validation run: None yet.
+  reuse them. The command test also asserts the request URL and `PUT` method.
+- Actual files changed: `commands/cloudflare/update-worker.js`,
+  `commands/cloudflare/index.js`,
+  `test/unit-tests/commands/cloudflare/update-worker.test.js`, `README.md`,
+  `docs/cloudflare.md`.
+- Validation run: `npm test` (lint clean, 584 tests pass);
+  `node kixx.js cloudflare update-worker --help`; `git diff --check`.
 - Blockers: None.

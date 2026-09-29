@@ -129,10 +129,11 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
             version.addBinding({ type: 'r2_bucket', name: 'MEDIA', bucket_name: 'media' });
             version.addBinding({ type: 'secret_text', name: 'TOKEN', text: 'sekret' });
             version.addBinding({ type: 'version_metadata', name: 'META' });
+            version.addBinding({ type: 'send_email', name: 'EMAIL' });
 
             const { bindings } = version.toJSON();
 
-            assertEqual(8, bindings.length);
+            assertEqual(9, bindings.length);
             assertEqual('d1-id', bindings[0].id);
             assertEqual('Counter', bindings[1].class_name);
             assertEqual('version-id', bindings[2].version_id);
@@ -142,6 +143,14 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
             assertEqual('sekret', bindings[6].text);
             assertEqual('version_metadata', bindings[7].type);
             assertEqual('META', bindings[7].name);
+            assertEqual(JSON.stringify({ type: 'send_email', name: 'EMAIL' }), JSON.stringify(bindings[8]));
+        });
+
+        it('serializes email without projecting an application sender into a restriction', () => {
+            const version = makeVersion();
+            version.addBinding({ type: 'send_email', name: 'EMAIL', from: 'no-reply@example.com' });
+
+            assertEqual(JSON.stringify({ type: 'send_email', name: 'EMAIL' }), JSON.stringify(version.toJSON().bindings[0]));
         });
 
         it('carries an r2_bucket jurisdiction only when one is given', () => {
@@ -184,6 +193,8 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
                 [ { type: 'secret_text', name: 'TOKEN' }, 'requires the text field as a string' ],
                 [ { type: 'kv_namespace', name: 'CACHE', 'namespace-id': 'x' }, 'requires the namespace_id field' ],
                 [ {}, 'requires a binding.type' ],
+                [ { type: 'send_email' }, 'requires a binding.name' ],
+                [ { type: 'send_email', name: '' }, 'requires a binding.name' ],
                 [ { type: 'plain_text' }, 'requires a binding.name' ],
             ];
 

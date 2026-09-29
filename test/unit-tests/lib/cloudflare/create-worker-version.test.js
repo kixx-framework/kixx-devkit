@@ -324,6 +324,73 @@ describe('create-worker-version', ({ it }) => {
         assert(base.hashes.bindingsHash !== source.hashes.bindingsHash, 'expected source-version hash change');
     });
 
+    it('prepares an email binding and uploads email-only additions, renames, and removals', async () => {
+        const fileSystem = makeFileSystem({});
+        const apiClient = makeApiClient({});
+        const cloudflareConfig = makeCloudflareConfig();
+        const options = runOptions({ fileSystem, apiClient, cloudflareConfig });
+
+        await createWorkerVersion(options);
+        carryStateForward(fileSystem);
+
+        cloudflareConfig.environments.production.SEND_EMAIL = {
+            bindingName: 'EMAIL',
+            from: 'no-reply@example.com',
+        };
+
+        const prepared = await prepareWorkerVersion(options);
+        const emailBinding = prepared.artifact.bindings.find((binding) => binding.name === 'EMAIL');
+        assertEqual(JSON.stringify({ type: 'send_email', name: 'EMAIL' }), JSON.stringify(emailBinding));
+
+        for (const bindingName of [ 'EMAIL', 'OTHER_EMAIL', null ]) {
+            if (bindingName === null) {
+                delete cloudflareConfig.environments.production.SEND_EMAIL;
+            } else {
+                cloudflareConfig.environments.production.SEND_EMAIL.bindingName = bindingName;
+            }
+
+            const result = await createWorkerVersion(options);
+
+            assertEqual('created', result.outcome);
+            assertEqual(true, result.changes.bindings);
+            assertEqual(false, result.changes.modules);
+            assertEqual(false, result.changes.config);
+
+            const payload = apiClient.calls.createWorkerVersion.at(-1).version;
+            const emailBindings = payload.bindings.filter((binding) => binding.type === 'send_email');
+            assertEqual(bindingName === null ? 0 : 1, emailBindings.length);
+
+            if (bindingName !== null) {
+                assertEqual(bindingName, emailBindings[0].name);
+            }
+
+            carryStateForward(fileSystem);
+            const unchanged = await createWorkerVersion(options);
+            assertEqual('skipped', unchanged.outcome);
+        }
+
+        assertEqual(4, apiClient.calls.createWorkerVersion.length);
+    });
+
+    it('rejects invalid email configuration before bundling, upload, or state writes', async () => {
+        const cloudflareConfig = makeCloudflareConfig();
+        cloudflareConfig.environments.production.SEND_EMAIL = { bindingName: 'BUILD_ID' };
+        const fileSystem = makeFileSystem({});
+        const apiClient = makeApiClient({});
+        const bundleModules = makeBundler('export default 1;');
+
+        const caught = await catchAsyncError(() => {
+            return createWorkerVersion(runOptions({ cloudflareConfig, fileSystem, apiClient, bundleModules }));
+        });
+
+        assert(caught, 'expected an invalid email binding name to be rejected');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('SEND_EMAIL.bindingName'), 'expected the config path');
+        assertEqual(0, bundleModules.callCount);
+        assertEqual(0, apiClient.calls.createWorkerVersion.length);
+        assertEqual(0, Object.keys(fileSystem.written).length);
+    });
+
     it('uploads with only changes.config true when compatibility_date changes', async () => {
         const fileSystem = makeFileSystem({ [SECRETS_FILEPATH]: 'API_SECRET=shh\n' });
         const apiClient = makeApiClient({ createWorkerVersion: async () => ({ id: 'version-id' }) });

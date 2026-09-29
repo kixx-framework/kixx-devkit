@@ -14,6 +14,7 @@ describe('worker-bindings', ({ it }) => {
         assertEqual(2, byType.kv_namespace.length);
         assertEqual(1, byType.durable_object_namespace.length);
         assertEqual(1, byType.r2_bucket.length);
+        assertEqual(1, byType.send_email.length);
         // TRUST_PROXY, plus the injected ENVIRONMENT.
         assertEqual(2, byType.plain_text.length);
         assertEqual(1, byType.inherit.length);
@@ -105,6 +106,73 @@ describe('worker-bindings', ({ it }) => {
         assert(caught.message.includes('DOCUMENT_STORE.bindingName'), 'expected the message to name the path');
     });
 
+    it('projects SEND_EMAIL without application fields', () => {
+        const bindings = build({
+            environmentConfig: { SEND_EMAIL: { bindingName: 'EMAIL', from: 'no-reply@example.com' } },
+            envars: {},
+        });
+
+        assertEqual(JSON.stringify([
+            { type: 'send_email', name: 'EMAIL' },
+            { type: 'plain_text', name: 'ENVIRONMENT', text: 'production' },
+        ]), JSON.stringify(bindings));
+    });
+
+    it('rejects malformed present SEND_EMAIL blocks', () => {
+        for (const block of [ null, false, '', 'EMAIL', [], 42 ]) {
+            const caught = catchError(() => build({ environmentConfig: { SEND_EMAIL: block } }));
+
+            assert(caught, 'expected malformed email configuration to be rejected');
+            assertEqual('UsageError', caught.name);
+            assert(caught.message.includes('SEND_EMAIL must be an object'), 'expected the config path');
+        }
+    });
+
+    it('rejects missing, empty, and invalid email binding names', () => {
+        for (const bindingName of [ undefined, null, false, 42, '', ' ', ' EMAIL', 'EMAIL ', '1EMAIL', 'SEND-EMAIL' ]) {
+            const caught = catchError(() => {
+                return build({ environmentConfig: { SEND_EMAIL: { bindingName } } });
+            });
+
+            assert(caught, 'expected an invalid email binding name to be rejected');
+            assertEqual('UsageError', caught.name);
+            assert(caught.message.includes('SEND_EMAIL.bindingName'), 'expected the config path');
+        }
+    });
+
+    it('rejects command-owned email binding names', () => {
+        for (const bindingName of [ 'ENVIRONMENT', 'BUILD_ID' ]) {
+            const caught = catchError(() => {
+                return build({ environmentConfig: { SEND_EMAIL: { bindingName } } });
+            });
+
+            assert(caught, 'expected a reserved name to be rejected');
+            assertEqual('UsageError', caught.name);
+            assert(caught.message.includes('SEND_EMAIL.bindingName'), 'expected the config path');
+            assert(caught.message.includes(bindingName), 'expected the reserved name');
+        }
+    });
+
+    it('reports both sources when email collides with a resource, plain value, or secret', () => {
+        const cases = [
+            { bindingName: 'DOCUMENT_STORE', source: 'DOCUMENT_STORE' },
+            { bindingName: 'TRUST_PROXY', source: '.env.production' },
+            { bindingName: 'API_SECRET', source: 'example.env.secrets' },
+        ];
+
+        for (const { bindingName, source } of cases) {
+            const environmentConfig = makeEnvironmentConfig();
+            environmentConfig.SEND_EMAIL = { bindingName };
+
+            const caught = catchError(() => build({ environmentConfig, secretNames: [ 'API_SECRET' ] }));
+
+            assert(caught, 'expected a collision to be rejected');
+            assertEqual('UsageError', caught.name);
+            assert(caught.message.includes('SEND_EMAIL'), 'expected the email source');
+            assert(caught.message.includes(source), 'expected the conflicting source');
+        }
+    });
+
     it('throws when a resource id is null', () => {
         const config = makeEnvironmentConfig();
         config.DOCUMENT_STORE.databaseId = null;
@@ -159,6 +227,7 @@ describe('worker-bindings', ({ it }) => {
         const bindingsOne = build({ environmentConfig: config, secretNames: [ 'API_SECRET' ] });
 
         const reordered = {
+            SEND_EMAIL: config.SEND_EMAIL,
             OBJECT_STORE: config.OBJECT_STORE,
             CONTENT_STORE: config.CONTENT_STORE,
             KEY_VALUE_STORE: config.KEY_VALUE_STORE,
@@ -205,6 +274,7 @@ function makeEnvironmentConfig() {
         OBJECT_STORE: {
             buckets: { assets: { bindingName: 'ASSET_BUCKET', bucketName: 'assets' } },
         },
+        SEND_EMAIL: { bindingName: 'EMAIL', from: 'no-reply@example.com' },
     };
 }
 

@@ -175,6 +175,29 @@ Optional application resource blocks produce bindings:
 | `KEY_VALUE_STORE` | KV namespace |
 | `CONTENT_STORE` | KV namespace and Durable Object namespace |
 | `OBJECT_STORE.buckets` | One R2 binding per bucket |
+| `SEND_EMAIL` | Email sending binding (`send_email`) |
+
+Configure email sending in the selected environment block:
+
+```js
+SEND_EMAIL: {
+    bindingName: 'EMAIL',
+    from: 'no-reply@example.com',
+},
+```
+
+`SEND_EMAIL` is optional. When present, it must be an object with a
+`bindingName` using a letter or underscore followed by letters, digits, or
+underscores. The name cannot be `ENVIRONMENT`, `BUILD_ID`, or conflict with
+another binding source. Invalid configuration fails before version upload.
+
+The upload binding is `{ type: 'send_email', name: 'EMAIL' }`. `from` remains
+application configuration and does not impose a binding restriction. Adding,
+renaming, or removing the binding changes `bindingsHash`, so normal builds
+detect the change without `--force`.
+
+Sender-domain onboarding is a separate Cloudflare prerequisite. See the
+[Workers email API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/).
 
 Each `OBJECT_STORE.buckets` entry takes a required `bindingName` and
 `bucketName`, plus three optional keys:

@@ -221,6 +221,53 @@ describe('worker-bindings', ({ it }) => {
         assert(caught.message.includes('KEY_VALUE_STORE'), 'expected the message to name KEY_VALUE_STORE');
     });
 
+    it('binds a JOB_QUEUE Durable Object namespace and ignores runtime config keys', () => {
+        const config = makeEnvironmentConfig();
+        config.JOB_QUEUE = {
+            durableObjectBindingName: 'JOB_QUEUE_DURABLE_OBJECT',
+            durableObjectClassName: 'JobQueueStore',
+            concurrency: 4,
+            retention: { completedMaxAgeDays: 7 },
+        };
+
+        const byName = groupByName(build({ environmentConfig: config }));
+
+        assertEqual('durable_object_namespace', byName.JOB_QUEUE_DURABLE_OBJECT.type);
+        assertEqual('JobQueueStore', byName.JOB_QUEUE_DURABLE_OBJECT.class_name);
+        assertEqual(3, Object.keys(byName.JOB_QUEUE_DURABLE_OBJECT).length);
+    });
+
+    it('names the exact JOB_QUEUE field path when a required field is missing', () => {
+        for (const field of [ 'durableObjectBindingName', 'durableObjectClassName' ]) {
+            const config = makeEnvironmentConfig();
+            config.JOB_QUEUE = {
+                durableObjectBindingName: 'JOB_QUEUE_DURABLE_OBJECT',
+                durableObjectClassName: 'JobQueueStore',
+            };
+            delete config.JOB_QUEUE[field];
+
+            const caught = catchError(() => build({ environmentConfig: config }));
+
+            assert(caught, 'expected an error to be thrown');
+            assertEqual('UsageError', caught.name);
+            assert(caught.message.includes(`JOB_QUEUE.${ field }`), `expected the message to name JOB_QUEUE.${ field }`);
+        }
+    });
+
+    it('rejects a JOB_QUEUE binding name that collides with another binding', () => {
+        const config = makeEnvironmentConfig();
+        config.JOB_QUEUE = {
+            durableObjectBindingName: 'CONTENT_STORE_DO',
+            durableObjectClassName: 'JobQueueStore',
+        };
+
+        const caught = catchError(() => build({ environmentConfig: config }));
+
+        assert(caught, 'expected an error to be thrown');
+        assertEqual('UsageError', caught.name);
+        assert(caught.message.includes('JOB_QUEUE'), 'expected the message to name JOB_QUEUE');
+    });
+
     it('sorts the result by name regardless of input key order', () => {
         const config = makeEnvironmentConfig();
 

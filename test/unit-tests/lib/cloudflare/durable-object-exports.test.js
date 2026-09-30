@@ -19,6 +19,29 @@ describe('buildDurableObjectExports()', ({ describe }) => {
             assertEqual(1, liveClasses.length);
         });
 
+        it('projects a JOB_QUEUE class to a live sqlite entry beside CONTENT_STORE', () => {
+            const { exports, liveClasses } = build({
+                CONTENT_STORE: { durableObjectClassName: 'ContentStore' },
+                JOB_QUEUE: { durableObjectClassName: 'JobQueueStore' },
+            });
+
+            assertEqual('durable-object', exports.JobQueueStore.type);
+            assertEqual('sqlite', exports.JobQueueStore.storage);
+            assertUndefined(exports.JobQueueStore.state);
+            assertEqual('ContentStore,JobQueueStore', liveClasses.join(','));
+        });
+
+        it('applies rename declarations to a JOB_QUEUE class', () => {
+            const { exports, liveClasses } = build({
+                JOB_QUEUE: { durableObjectClassName: 'NewQueue' },
+                DURABLE_OBJECT_MIGRATIONS: [ { action: 'rename', from: 'OldQueue', to: 'NewQueue' } ],
+            });
+
+            assertEqual('renamed', exports.OldQueue.state);
+            assertEqual('NewQueue', exports.OldQueue.renamed_to);
+            assertEqual('NewQueue', liveClasses.join(','));
+        });
+
         it('yields an empty map when nothing is configured or declared', () => {
             const { exports, liveClasses } = build({});
 

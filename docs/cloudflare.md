@@ -174,6 +174,7 @@ Optional application resource blocks produce bindings:
 | `DOCUMENT_STORE` | D1 database |
 | `KEY_VALUE_STORE` | KV namespace |
 | `CONTENT_STORE` | KV namespace and Durable Object namespace |
+| `JOB_QUEUE` | Durable Object namespace (`durableObjectBindingName`, `durableObjectClassName`); other keys are runtime config ignored by devkit |
 | `OBJECT_STORE.buckets` | One R2 binding per bucket |
 | `SEND_EMAIL` | Email sending binding (`send_email`) |
 
@@ -318,7 +319,7 @@ plain dotenv file, and exact inherited secret definitions into a
 deterministically name-sorted binding array.
 
 It also creates a declarative Cloudflare `exports` map for Durable Objects.
-Classes currently configured by `CONTENT_STORE` are live SQLite-backed exports.
+Classes configured by `CONTENT_STORE` and `JOB_QUEUE` are live SQLite-backed exports.
 Explicit declarations in `DURABLE_OBJECT_MIGRATIONS` represent lifecycle
 operations:
 

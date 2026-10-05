@@ -3,6 +3,48 @@ Kixx Devkit
 
 A developer tool-kit for Kixx applications.
 
+Install
+-------
+
+Install the `kixx` command with Node.js 24 or later:
+
+```
+npm install -g kixx-devkit
+```
+
+Or with Deno 2.8 or later:
+
+```
+deno install -g -RWNE --allow-sys=homedir jsr:@kixx/devkit/kixx
+```
+
+The Deno permissions:
+
+- `-R` read and `-W` write: project files, `.kixx` settings, and Cloudflare
+  state files.
+- `-N` net: the Cloudflare API and your application's Admin and Publishing
+  APIs.
+- `-E` env: prompt values such as `KIXX_ADMIN_PASSWORD`, and any variable your
+  `cloudflare-config.js` reads.
+- `--allow-sys=homedir`: locate the `~/.kixx` settings layer.
+
+Subprocess (`--allow-run`) and FFI access are not granted. The CLI never needs
+them, and it executes your project's `cloudflare-config.js`, so withholding
+them limits what that code can do.
+
+Upgrade:
+
+```
+npm install -g kixx-devkit@latest
+deno install -g -f -RWNE --allow-sys=homedir jsr:@kixx/devkit/kixx
+```
+
+Verify the install:
+
+```
+kixx --version
+```
+
 CLI Commands
 ------------
 

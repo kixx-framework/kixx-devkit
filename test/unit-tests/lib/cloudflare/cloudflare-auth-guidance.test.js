@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual, assertMatches } from 'kixx-assert';
+import { assert, assertEqual, assertMatches } from '../../../../lib/vendor/kixx-assert/mod.js';
 import CloudflareApiError from '../../../../lib/cloudflare/cloudflare-api-error.js';
 import { describeCloudflareAuthFailure } from '../../../../lib/cloudflare/cloudflare-auth-guidance.js';
 

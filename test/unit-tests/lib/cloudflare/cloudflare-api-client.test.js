@@ -4,7 +4,7 @@ import {
     assertEqual,
     assertMatches,
     isString,
-} from 'kixx-assert';
+} from '../../../../lib/vendor/kixx-assert/mod.js';
 import CloudflareAPIClient from '../../../../lib/cloudflare/cloudflare-api-client.js';
 
 

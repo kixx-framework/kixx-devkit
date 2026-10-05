@@ -1,4 +1,4 @@
-import { assertEqual, assertMatches } from 'kixx-assert';
+import { assertEqual, assertMatches } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { describe } from 'kixx-test';
 import CloudflareReleaseCommand from '../../../../commands/cloudflare/release.js';
 import captureOutput from '../../helpers/capture-output.js';

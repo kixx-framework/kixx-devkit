@@ -4,7 +4,7 @@ import {
     assertEqual,
     assertMatches,
     assertNotMatches,
-} from 'kixx-assert';
+} from '../../../../lib/vendor/kixx-assert/mod.js';
 
 import {
     assertPublishableContentSources,

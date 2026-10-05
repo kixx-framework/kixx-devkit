@@ -1,9 +1,9 @@
 # Unit Testing Guide
 
-This project uses two ES module libraries installed in `node_modules/` and imported by bare module name:
+This project uses two ES module libraries:
 
-- `kixx-test` provides the test runner API: `describe`, `it`, `before`, `after`, `xit`, `xdescribe`, and `MockTracker`.
-- `kixx-assert` provides assertion helpers. Assertions throw `AssertionError` on failure.
+- `kixx-test` provides the test runner API: `describe`, `it`, `before`, `after`, `xit`, `xdescribe`, and `MockTracker`. It is installed in `node_modules/` and imported by bare module name.
+- `kixx-assert` provides assertion helpers. Assertions throw `AssertionError` on failure. It is vendored in `lib/vendor/kixx-assert/` and imported by relative path, so tests and source share one `AssertionError`.
 
 The project test runner imports test files first, which register top-level `describe` blocks, then executes the registered tests.
 
@@ -15,11 +15,11 @@ The project test runner imports test files first, which register top-level `desc
 
 ## Imports
 
-Import directly from the modules using their bare module names:
+Import `kixx-test` by bare name and `kixx-assert` by relative path to the vendored copy, at the correct depth for the test file:
 
 ```javascript
 import { describe, MockTracker } from 'kixx-test';
-import { assert, assertEqual, assertMatches } from 'kixx-assert';
+import { assert, assertEqual, assertMatches } from '../../../lib/vendor/kixx-assert/mod.js';
 ```
 
 Import only the helpers used in that file.
@@ -28,7 +28,7 @@ Import only the helpers used in that file.
 
 ```javascript
 import { describe } from 'kixx-test';
-import { assert, assertEqual } from 'kixx-assert';
+import { assert, assertEqual } from '../../../lib/vendor/kixx-assert/mod.js';
 
 describe('ModuleName', ({ before, after, it, describe, xit, xdescribe }) => {
     let subject;
@@ -200,7 +200,7 @@ Use `MockTracker` to create standalone mock functions or replace object methods/
 
 ```javascript
 import { describe, MockTracker } from 'kixx-test';
-import { assertEqual, assertUndefined } from 'kixx-assert';
+import { assertEqual, assertUndefined } from '../../../lib/vendor/kixx-assert/mod.js';
 
 describe('Service', ({ before, after, it }) => {
     const tracker = new MockTracker();

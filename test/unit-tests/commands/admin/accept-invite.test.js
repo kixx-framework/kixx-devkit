@@ -1,5 +1,5 @@
 import process from 'node:process';
-import { assert, assertEqual, assertMatches } from 'kixx-assert';
+import { assert, assertEqual, assertMatches } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { describe } from 'kixx-test';
 
 import AdminAcceptInviteCommand from '../../../../commands/admin/accept-invite.js';

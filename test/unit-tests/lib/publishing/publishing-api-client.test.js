@@ -5,7 +5,7 @@ import {
     assertMatches,
     assertNotMatches,
     assertUndefined,
-} from 'kixx-assert';
+} from '../../../../lib/vendor/kixx-assert/mod.js';
 
 import PublishingAPIClient from '../../../../lib/publishing/publishing-api-client.js';
 

@@ -1,5 +1,5 @@
 import process from 'node:process';
-import { assert, assertEqual, assertMatches, assertUndefined } from 'kixx-assert';
+import { assert, assertEqual, assertMatches, assertUndefined } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { describe } from 'kixx-test';
 
 import AdminCreatePublishingTokenCommand from '../../../../commands/admin/create-publishing-token.js';

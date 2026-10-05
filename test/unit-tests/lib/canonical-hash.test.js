@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual, assertNotEqual, assertMatches } from 'kixx-assert';
+import { assert, assertEqual, assertNotEqual, assertMatches } from '../../../lib/vendor/kixx-assert/mod.js';
 import { canonicalize, sha256Hex, hashValue } from '../../../lib/canonical-hash.js';
 
 

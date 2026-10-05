@@ -1,5 +1,5 @@
 import process from 'node:process';
-import { isNonEmptyString } from 'kixx-assert';
+import { isNonEmptyString } from '../../lib/vendor/kixx-assert/mod.js';
 
 import assignRelease from '../../lib/publishing/assign-release.js';
 import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';

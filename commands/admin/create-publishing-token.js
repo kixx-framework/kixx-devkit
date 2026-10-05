@@ -1,5 +1,5 @@
 import process from 'node:process';
-import { isUndefined } from 'kixx-assert';
+import { isUndefined } from '../../lib/vendor/kixx-assert/mod.js';
 
 import resolveAdminEnvironment from '../../lib/admin/resolve-admin-environment.js';
 import { promptForValue } from '../../lib/prompt.js';

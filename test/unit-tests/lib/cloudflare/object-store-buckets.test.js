@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual, assertUndefined } from 'kixx-assert';
+import { assert, assertEqual, assertUndefined } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { readObjectStoreBuckets } from '../../../../lib/cloudflare/object-store-buckets.js';
 
 describe('object-store-buckets', ({ it }) => {

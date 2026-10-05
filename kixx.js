@@ -17,6 +17,7 @@ import {
     findMissingNonEmptyStringKeys,
     loadConfiguration,
 } from './lib/config-loader.js';
+import manifest from './deno.json' with { type: 'json' };
 
 
 function appendWrappedDescription(lines, description, initialPrefix) {
@@ -69,7 +70,7 @@ function renderHelp(sections) {
     }
 
     if (usage) {
-        lines.push(`Usage: kixx.js ${ usage }`);
+        lines.push(`Usage: kixx ${ usage }`);
         lines.push('');
     }
 
@@ -107,6 +108,10 @@ function renderHelp(sections) {
             help: {
                 type: 'boolean',
                 description: 'Show this help',
+            },
+            version: {
+                type: 'boolean',
+                description: 'Print the kixx version',
             },
         };
 
@@ -216,8 +221,19 @@ async function main() {
                 type: 'boolean',
                 short: 'h',
             },
+            version: {
+                type: 'boolean',
+                short: 'v',
+            },
         },
     });
+
+    // Checked before command resolution so the flag works anywhere on the
+    // command line. No sub-command may declare -v (enforced by a unit test).
+    if (args.values.version) {
+        process.stdout.write(`${ manifest.version }\n`);
+        return 0;
+    }
 
     const commandRegistry = new CommandRegistry(commandModules);
 
@@ -231,6 +247,7 @@ async function main() {
                 message: `The top level command "${ commandName }" does not exist.`,
                 usage: '<command> <subcommand> [options] <...args>',
                 commands,
+                options: {},
             });
             return 1;
         }
@@ -269,6 +286,7 @@ async function main() {
             renderHelp({
                 usage: '<command> <subcommand> [options] <...args>',
                 commands,
+                options: {},
             });
             return 0;
         }
@@ -286,6 +304,7 @@ async function main() {
             message: 'A top level command name is required as the first argument.',
             usage: '<command> <subcommand> [options] <...args>',
             commands,
+            options: {},
         });
         return 1;
     }

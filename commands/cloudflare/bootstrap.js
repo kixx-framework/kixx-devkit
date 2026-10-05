@@ -103,9 +103,9 @@ export default class CloudflareBootstrapCommand {
 function renderNextSteps(environment) {
     return [
         'Next:',
-        `  kixx.js admin accept-invite -e ${ environment }`,
-        `  kixx.js admin create-publishing-token -e ${ environment }`,
-        `  kixx.js cloudflare release -e ${ environment }`,
+        `  kixx admin accept-invite -e ${ environment }`,
+        `  kixx admin create-publishing-token -e ${ environment }`,
+        `  kixx cloudflare release -e ${ environment }`,
         '',
     ].join('\n');
 }

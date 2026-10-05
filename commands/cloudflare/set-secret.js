@@ -6,7 +6,7 @@ import { wrapText } from '../../lib/text-wrap.js';
 import { readSecretValue } from '../../lib/prompt.js';
 import UsageError from '../../lib/usage-error.js';
 
-const COMMAND_NAME = 'kixx.js cloudflare set-secret';
+const COMMAND_NAME = 'kixx cloudflare set-secret';
 
 export default class CloudflareSetSecretCommand {
 

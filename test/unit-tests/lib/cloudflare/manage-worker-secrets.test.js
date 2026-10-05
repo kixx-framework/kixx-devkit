@@ -235,7 +235,7 @@ describe('manage-worker-secrets', ({ it }) => {
             apiClient,
             fileSystem,
             name: 'EXISTING',
-            command: 'kixx.js cloudflare delete-secret',
+            command: 'kixx cloudflare delete-secret',
         }));
 
         assertEqual('EXISTING', result.changedSecretNames.join(','));
@@ -480,7 +480,7 @@ function runOptions(overrides) {
             },
         },
         apiClient: makeApiClient(),
-        command: 'kixx.js cloudflare set-secrets',
+        command: 'kixx cloudflare set-secrets',
         fileSystem,
         ...options,
     };

@@ -11,7 +11,7 @@ Command Structure
 Every invocation names two things:
 
 ```
-kixx.js <command> <subcommand> [options] <...args>
+kixx <command> <subcommand> [options] <...args>
 ```
 
 The first argument is a **command**: a directory under `commands/`. The second

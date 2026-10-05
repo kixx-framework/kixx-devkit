@@ -1,4 +1,4 @@
-# `kixx.js app` — Content Releases
+# `kixx app` — Content Releases
 
 Commands for creating, assigning, and rolling back application content through
 the Publishing API. See [configuration.md](configuration.md) for
@@ -21,7 +21,7 @@ Scans and uploads application content and creates an immutable Release without
 reading or changing any build pointer.
 
 ```sh
-kixx.js app create-release -e production [--dry-run] [--verbose] \
+kixx app create-release -e production [--dry-run] [--verbose] \
   [--message text] [--source-revision revision]
 ```
 
@@ -38,7 +38,7 @@ content fails before network writes; upload failure prevents Release creation.
 Changes one build pointer to an existing Release.
 
 ```sh
-kixx.js app assign-build -e production \
+kixx app assign-build -e production \
   --build-id build-id --release-id release-id [--reason publish]
 ```
 
@@ -83,7 +83,7 @@ Creates an immutable content Release and assigns it to a build. It is the
 convenience composition of `create-release` and `assign-build`.
 
 ```sh
-kixx.js app publish --environment production
+kixx app publish --environment production
 ```
 
 | Option | Meaning |
@@ -158,13 +158,13 @@ Stylesheet validation reports these problem codes:
 Inspect recent history without writing:
 
 ```sh
-kixx.js app rollback -e production --build-id build-id --list
+kixx app rollback -e production --build-id build-id --list
 ```
 
 Assign an earlier Release:
 
 ```sh
-kixx.js app rollback -e production --build-id build-id \
+kixx app rollback -e production --build-id build-id \
   --release-id release-id
 ```
 

@@ -137,6 +137,8 @@ The ESLint config in `eslint.config.js` enforces the code style rules beyond wha
 
 This project uses JavaScript in the **ECMAScript 2022** standard using **ES modules** (no CommonJS, no `"use strict"`).
 
+One later feature is allowed: JSON import attributes (ES2025), which `kixx.js` uses to read the version from `deno.json` (`import manifest from './deno.json' with { type: 'json' };`). The linter parses ES2025 so this works; do not use other post-2022 syntax.
+
 The JavaScript code in `app/` must run on multiple platforms:
 
 - Node.js

@@ -7,7 +7,7 @@ import defaultFileSystem from '../../lib/file-system.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 
-const COMMAND_NAME = 'kixx.js cloudflare set-secrets';
+const COMMAND_NAME = 'kixx cloudflare set-secrets';
 
 export default class CloudflareSetSecretsCommand {
 

@@ -12,25 +12,25 @@ and configures commands, and what to write to add a new one.
 
 Available workflows:
 
-- `kixx.js app create-release` — create immutable application content.
-- `kixx.js app assign-build` — assign an existing Release to a build.
-- `kixx.js app publish` — create and assign application content.
-- `kixx.js app rollback` — inspect or restore a build's content history.
-- `kixx.js cloudflare create-worker` — create a Cloudflare Worker.
-- `kixx.js cloudflare update-worker` — replace a Worker's Worker-level configuration.
-- `kixx.js cloudflare bootstrap` — create the Worker if missing and deploy its first version.
-- `kixx.js cloudflare create-worker-version` — upload an undeployed Worker version.
-- `kixx.js cloudflare set-secret` — create an undeployed version with one secret changed.
-- `kixx.js cloudflare set-secrets` — atomically set additive secrets from dotenv input.
-- `kixx.js cloudflare recover-secret-version` — repair state for a verified secret-only version.
-- `kixx.js cloudflare delete-secret` — create an undeployed version without one secret.
-- `kixx.js cloudflare deploy-version` — route traffic to an existing Worker version.
-- `kixx.js cloudflare release` — stage content and deploy a Worker release.
-- `kixx.js admin gen-secure-token` — generate a secure bootstrap token.
-- `kixx.js admin accept-invite` — redeem an invite and create an admin account.
-- `kixx.js admin create-publishing-token` — mint a Publishing API token.
-- `kixx.js admin list-migrations` — list registered migrations and their status.
-- `kixx.js admin run-migration` — run one bounded batch of a migration.
+- `kixx app create-release` — create immutable application content.
+- `kixx app assign-build` — assign an existing Release to a build.
+- `kixx app publish` — create and assign application content.
+- `kixx app rollback` — inspect or restore a build's content history.
+- `kixx cloudflare create-worker` — create a Cloudflare Worker.
+- `kixx cloudflare update-worker` — replace a Worker's Worker-level configuration.
+- `kixx cloudflare bootstrap` — create the Worker if missing and deploy its first version.
+- `kixx cloudflare create-worker-version` — upload an undeployed Worker version.
+- `kixx cloudflare set-secret` — create an undeployed version with one secret changed.
+- `kixx cloudflare set-secrets` — atomically set additive secrets from dotenv input.
+- `kixx cloudflare recover-secret-version` — repair state for a verified secret-only version.
+- `kixx cloudflare delete-secret` — create an undeployed version without one secret.
+- `kixx cloudflare deploy-version` — route traffic to an existing Worker version.
+- `kixx cloudflare release` — stage content and deploy a Worker release.
+- `kixx admin gen-secure-token` — generate a secure bootstrap token.
+- `kixx admin accept-invite` — redeem an invite and create an admin account.
+- `kixx admin create-publishing-token` — mint a Publishing API token.
+- `kixx admin list-migrations` — list registered migrations and their status.
+- `kixx admin run-migration` — run one bounded batch of a migration.
 
 See [app.md](docs/app.md), [cloudflare.md](docs/cloudflare.md),
 [admin.md](docs/admin.md), and [configuration.md](docs/configuration.md) for

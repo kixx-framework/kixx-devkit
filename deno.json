@@ -11,7 +11,7 @@
     },
     "tasks": {
         "lint": "deno run -R --allow-sys=uid run-linter.js",
-        "test": "deno run -RWE --allow-sys=uid run-tests.js",
+        "test": "deno run -RWE --allow-run --allow-sys=uid run-tests.js",
         "test:node": "deno install && node run-tests.js",
         "check": "deno check kixx.js run-tests.js run-linter.js",
         "kixx": "deno run -RWNE --allow-sys=homedir kixx.js"

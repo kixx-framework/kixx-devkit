@@ -16,6 +16,11 @@ const COMMANDS_DIRECTORY = fileURLToPath(new URL('../../../commands/', import.me
 
 const OPTION_TYPES = [ 'string', 'boolean' ];
 
+// kixx.js handles these before a sub-command runs, so a sub-command which
+// declared them would never see them.
+const RESERVED_FLAG_NAMES = [ 'help', 'version' ];
+const RESERVED_SHORT_FLAGS = [ 'h', 'v' ];
+
 const REQUIRED_SETTINGS_KEYS = [
     'requiredConfig',
     'requiredSecrets',
@@ -106,6 +111,8 @@ function assertOptions(label, options) {
             OPTION_TYPES.includes(option.type),
             `${ label } --${ flagName } type is one of ${ OPTION_TYPES.join(', ') }`,
         );
+        assert(!RESERVED_FLAG_NAMES.includes(flagName), `${ label } --${ flagName } is reserved`);
+        assert(!RESERVED_SHORT_FLAGS.includes(option.short), `${ label } -${ option.short } is reserved`);
     }
 }
 

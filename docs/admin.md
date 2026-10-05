@@ -1,4 +1,4 @@
-# `kixx.js admin` — Administration
+# `kixx admin` — Administration
 
 Commands for bootstrapping the root admin account, minting Publishing API
 tokens, and running data migrations against a deployment's Admin API. See
@@ -29,20 +29,20 @@ No admin credential — email, password, or invite token — is ever stored in
 1. Generate a strong, secret token:
 
    ```sh
-   kixx.js admin gen-secure-token
+   kixx admin gen-secure-token
    ```
 
 2. Configure it as `ADMIN_BOOTSTRAP_TOKEN` in the deployment.
 3. Redeem it once to create the root admin:
 
    ```sh
-   kixx.js admin accept-invite -e production
+   kixx admin accept-invite -e production
    ```
 
 4. Mint a publishing credential and store it in `.kixx/secrets.json`:
 
    ```sh
-   kixx.js admin create-publishing-token -e production
+   kixx admin create-publishing-token -e production
    ```
 
 5. Remove `ADMIN_BOOTSTRAP_TOKEN` from the deployment.
@@ -59,7 +59,7 @@ suitable for `ADMIN_BOOTSTRAP_TOKEN` or any other secret this CLI does not
 otherwise create for you.
 
 ```sh
-kixx.js admin gen-secure-token [--prefix text]
+kixx admin gen-secure-token [--prefix text]
 ```
 
 `--prefix` prepends a literal string to the random token body.
@@ -70,7 +70,7 @@ Redeems a one-time admin invite or bootstrap token and creates the admin
 account it grants.
 
 ```sh
-kixx.js admin accept-invite -e production
+kixx admin accept-invite -e production
 ```
 
 Prompts for the invite token, the new account's email address, and its
@@ -89,7 +89,7 @@ Mints a bearer token for the Publishing API, authenticating as an existing
 admin.
 
 ```sh
-kixx.js admin create-publishing-token -e production \
+kixx admin create-publishing-token -e production \
   [--roles editor] [--ttl 2592000] [--description text]
 ```
 
@@ -108,7 +108,7 @@ Lists every migration registered in the deployed build, in registry order,
 with its status and, for a failed migration, its error message.
 
 ```sh
-kixx.js admin list-migrations -e production
+kixx admin list-migrations -e production
 ```
 
 ## `run-migration`
@@ -118,7 +118,7 @@ batch** — the operator owns the loop and repeats the command until the printed
 `done` is `true`.
 
 ```sh
-kixx.js admin run-migration -e production <id> \
+kixx admin run-migration -e production <id> \
   [--dry-run] [--force] [--cursor value] [--yes]
 ```
 
@@ -129,8 +129,8 @@ To safely apply a migration:
    returned `--cursor` forward:
 
    ```sh
-   kixx.js admin run-migration -e production <id> --dry-run
-   kixx.js admin run-migration -e production <id> --dry-run --cursor <cursor>
+   kixx admin run-migration -e production <id> --dry-run
+   kixx admin run-migration -e production <id> --dry-run --cursor <cursor>
    ```
 
 3. Review the dry-run stats.
@@ -138,7 +138,7 @@ To safely apply a migration:
    real-run progress — until `done` is `true`:
 
    ```sh
-   kixx.js admin run-migration -e production <id>
+   kixx admin run-migration -e production <id>
    ```
 
 5. Run `list-migrations` again and confirm `status: applied` with the

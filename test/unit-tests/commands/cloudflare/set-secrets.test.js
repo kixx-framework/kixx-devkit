@@ -15,7 +15,7 @@ describe('CloudflareSetSecretsCommand', ({ it }) => {
         assertEqual(1, calls.length);
         assertEqual('fake-alpha', calls[0].workflow.secrets.ALPHA);
         assertEqual('fake-zeta', calls[0].workflow.secrets.ZETA);
-        assertEqual('kixx.js cloudflare set-secrets', calls[0].workflow.command);
+        assertEqual('kixx cloudflare set-secrets', calls[0].workflow.command);
         assert(output.text.includes('ALPHA, ZETA'), 'expected sorted changed names');
         assert(!output.text.includes('fake-alpha'), 'expected no secret value in output');
     });

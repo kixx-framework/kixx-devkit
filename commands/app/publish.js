@@ -114,7 +114,7 @@ export default class AppPublishCommand {
                 throw new ReleaseAssignmentError(
                     `Release "${ result.releaseId }" was created but could not be assigned to ` +
                     `build "${ buildId }": ${ cause.message }\n` +
-                    'Recover with: kixx.js app assign-build --environment ' +
+                    'Recover with: kixx app assign-build --environment ' +
                     `${ options?.environment } --build-id ${ buildId } --release-id ${ result.releaseId }`,
                     { releaseId: result.releaseId, buildId, cause },
                 );

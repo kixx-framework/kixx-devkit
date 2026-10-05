@@ -34,9 +34,9 @@ describe('CloudflareBootstrapCommand', ({ it }) => {
         assert(output.text.includes('BUILD_ID: bootstrap-build-id'), output.text);
         assert(output.text.includes('Wrote .kixx/cloudflare-state.production.json'), output.text);
         assert(output.text.includes('ContentAddressableIndexStore'), output.text);
-        assert(output.text.includes('kixx.js admin accept-invite -e production'), output.text);
-        assert(output.text.includes('kixx.js admin create-publishing-token -e production'), output.text);
-        assert(output.text.includes('kixx.js cloudflare release -e production'), output.text);
+        assert(output.text.includes('kixx admin accept-invite -e production'), output.text);
+        assert(output.text.includes('kixx admin create-publishing-token -e production'), output.text);
+        assert(output.text.includes('kixx cloudflare release -e production'), output.text);
         assert(!output.text.includes('secret-sentinel'), 'expected no secret value in output');
     });
 

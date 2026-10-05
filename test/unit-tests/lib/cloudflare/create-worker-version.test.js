@@ -467,7 +467,7 @@ describe('create-worker-version', ({ it }) => {
         const payload = apiClient.calls.createWorkerVersion[0].version;
 
         assertEqual(result.buildId, payload.annotations['workers/tag']);
-        assertEqual('kixx.js cloudflare create-worker-version', payload.annotations['workers/triggered_by']);
+        assertEqual('kixx cloudflare create-worker-version', payload.annotations['workers/triggered_by']);
         assert(!Object.prototype.hasOwnProperty.call(payload.annotations, 'workers/message'), 'expected no workers/message');
     });
 
@@ -840,7 +840,7 @@ describe('create-worker-version', ({ it }) => {
             !call.version.bindings.some((binding) => binding.type === 'inherit'),
             'expected no inherited binding in the bootstrap upload',
         );
-        assertEqual('kixx.js cloudflare bootstrap', call.version.annotations['workers/triggered_by']);
+        assertEqual('kixx cloudflare bootstrap', call.version.annotations['workers/triggered_by']);
         assert(!JSON.stringify(result).includes(sentinel), 'expected no secret value in the created result');
         assert(!fileSystem.written[STATE_FILEPATH].includes(sentinel), 'expected no secret value in state');
 

@@ -139,8 +139,8 @@ function renderResult(migrationId, environment, result) {
 
     if (!done) {
         const next = dryRun
-            ? `kixx.js admin run-migration -e ${ environment } ${ migrationId } --dry-run --cursor ${ cursor }`
-            : `kixx.js admin run-migration -e ${ environment } ${ migrationId }`;
+            ? `kixx admin run-migration -e ${ environment } ${ migrationId } --dry-run --cursor ${ cursor }`
+            : `kixx admin run-migration -e ${ environment } ${ migrationId }`;
         lines.push('', `Next: ${ next }`);
     }
 

@@ -272,7 +272,7 @@ describe('CloudflareAPIClient', ({ it }) => {
         const result = await client.createWorkerSecretVersion(
             'example-worker',
             { API_KEY: 'FAKE_SECRET_VALUE', OLD_SECRET: null },
-            { command: 'kixx.js cloudflare set-secrets' },
+            { command: 'kixx cloudflare set-secrets' },
         );
 
         assertEqual('secret-version-id', result.versionId);
@@ -294,7 +294,7 @@ describe('CloudflareAPIClient', ({ it }) => {
         assertEqual(null, payload.env.OLD_SECRET);
         assertMatches(/^config-change-[0-9a-f-]+$/, payload.annotations['workers/tag']);
         assertEqual(
-            'kixx.js cloudflare set-secrets',
+            'kixx cloudflare set-secrets',
             payload.annotations['workers/triggered_by'],
         );
 

@@ -5,7 +5,7 @@ import defaultFileSystem from '../../lib/file-system.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 
-const COMMAND_NAME = 'kixx.js cloudflare delete-secret';
+const COMMAND_NAME = 'kixx cloudflare delete-secret';
 
 export default class CloudflareDeleteSecretCommand {
 

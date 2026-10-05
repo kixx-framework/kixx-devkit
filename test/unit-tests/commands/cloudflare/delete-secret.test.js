@@ -23,7 +23,7 @@ describe('CloudflareDeleteSecretCommand', ({ it }) => {
         assertEqual(0, exitCode);
         assertEqual(1, calls.length);
         assertEqual('OLD_SECRET', calls[0].name);
-        assertEqual('kixx.js cloudflare delete-secret', calls[0].command);
+        assertEqual('kixx cloudflare delete-secret', calls[0].command);
         assert(output.text.includes('OLD_SECRET'), 'expected changed name');
         assert(output.text.includes('new-version-id (undeployed)'), 'expected undeployed version');
         assert(!Object.prototype.hasOwnProperty.call(calls[0], 'publishingClient'));

@@ -96,7 +96,7 @@ RD-8 depends on RD-6, RD-7, DK-2, and DK-3.
 
 ### Task RD-1: Vendor `kixx-assert`
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None
 **Documentation:** `agents/docs/code-style-guide.md`; `test/README.md`
 
@@ -137,10 +137,10 @@ changes, and it works under the current Node tooling.
 
 **Acceptance criteria**
 
-- [ ] `grep -rn "from 'kixx-assert'" lib commands test kixx.js run-tests.js`
+- [x] `grep -rn "from 'kixx-assert'" lib commands test kixx.js run-tests.js`
       returns nothing.
-- [ ] The full test suite passes with `node_modules/kixx-assert` deleted.
-- [ ] Lint is clean.
+- [x] The full test suite passes with `node_modules/kixx-assert` deleted.
+- [x] Lint is clean.
 
 **Validation**
 
@@ -150,19 +150,31 @@ changes, and it works under the current Node tooling.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: `mod.js` and `LICENSE` copied unmodified from
+  `node_modules/kixx-assert` (2.1.1) into `lib/vendor/kixx-assert/`, plus a
+  README naming version and upstream. All 96 importing files rewritten to
+  depth-correct relative paths. `kixx-assert` removed from `package.json`
+  `devDependencies`.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries: `mod.js` has no imports, so vendoring needed no
+  edits. `test/README.md` updated: intro explains `kixx-assert` is vendored;
+  examples use `../../../lib/vendor/kixx-assert/mod.js` (depth of
+  `test/unit-tests/lib/*.test.js`). Its "File Conventions" section still
+  shows stale `test/lib/...` paths; left alone (out of scope).
+- Actual files changed: `lib/vendor/kixx-assert/{mod.js,LICENSE,README.md}`
+  (new); 31 files in `lib/`+`commands/` and 64 in `test/unit-tests/`
+  (imports); `test/README.md`; `package.json`.
+- Validation run: with `node_modules/kixx-assert` deleted,
+  `node run-tests.js` — 622 tests passed; `npm run lint` — clean; grep for
+  `from 'kixx-assert'` — no hits.
 - Blockers: None.
 
 ---
 
 ### Task RD-2: Run the project toolchain on Deno, with Node release verification
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RD-1
 **Documentation:** `README.md`; `AGENTS.md`; `test/README.md`;
 `agents/docs/code-style-guide.md`
@@ -226,14 +238,14 @@ every command is unchanged.
 
 **Acceptance criteria**
 
-- [ ] From a clean checkout with no `node_modules/`, `deno task check`,
+- [x] From a clean checkout with no `node_modules/`, `deno task check`,
       `deno task lint`, and `deno task test` pass.
-- [ ] `deno task test:node` runs the full suite on Node and passes.
-- [ ] `deno task test test/unit-tests/lib` and `--skip <path>` behave as
+- [x] `deno task test:node` runs the full suite on Node and passes.
+- [x] `deno task test test/unit-tests/lib` and `--skip <path>` behave as
       `node run-tests.js` did.
-- [ ] `deno task kixx` with no arguments prints the command list and exits
+- [x] `deno task kixx` with no arguments prints the command list and exits
       `1`. `deno task kixx admin gen-secure-token` exits `0`.
-- [ ] Developer docs tell the reader to use `deno task`, not `npm`.
+- [x] Developer docs tell the reader to use `deno task`, not `npm`.
 
 **Validation**
 
@@ -245,19 +257,52 @@ every command is unchanged.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: `deno.json` with name, version `0.1.0`, `nodeModulesDir`,
+  pinned `imports`, and the five tasks; `deno.lock` generated;
+  `package.json` stripped; developer docs switched to `deno task`.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - Task permissions, found by running with `--no-prompt` and widening only
+    on `NotCapable`: `lint` = `-R --allow-sys=uid`; `test` =
+    `-RWE --allow-sys=uid` (tests read `TMPDIR` via `os.tmpdir()` and set and
+    delete fixture env vars); `kixx` = `-RWNE --allow-sys=homedir` as planned.
+  - **On Deno, `fs.access()` requires `--allow-sys=uid`.** `lib/command-registry.js`
+    and `lib/cloudflare-config-loader.js` used `fsp.access()` as an existence
+    check, which made `deno task kixx admin gen-secure-token` fail with
+    `NotCapable`. Both now use `fsp.stat()` (same semantics for the default
+    `F_OK` check). RD-6 must still watch for other `node:` shims that need
+    `sys` permissions; avoid `access()` in new code.
+  - `exports: { "./kixx": "./kixx.js" }` added to `deno.json` now, because
+    without it every `deno task` prints a warning. RD-5 still owns verifying
+    it with `deno publish --dry-run`.
+  - `package.json` `files: ["lib/"]` was removed as stale; RD-5 adds the
+    correct list with `bin`.
+  - `deno check` on plain JS (no `checkJs` / `@ts-check`) verifies module
+    resolution only; a type error in a `.js` file does not fail it.
+  - `deno task <name> <args>` appends args to the last command in the task,
+    so `test:node` forwards to `node run-tests.js` as required.
+  - `run-tests.js` and `run-linter.js` needed no changes. `run-tests.js`
+    usage text still says `node run-tests.js`; left as-is.
+- Actual files changed: `deno.json`, `deno.lock` (new); `package.json`;
+  `.gitignore` (comment only); `README.md` (Development section);
+  `AGENTS.md` (Linting); `commands/README.md` (verify block);
+  `test/README.md` (how to run); `lib/command-registry.js`,
+  `lib/cloudflare-config-loader.js` (`access` → `stat`).
+- Validation run: after `rm -rf node_modules`: `deno task check`, `lint`,
+  `test` (622 passed), `test:node` (622 passed) all exit 0;
+  `deno task test test/unit-tests/lib` = 541 tests and
+  `--skip test/unit-tests/lib/config-loader.test.js` = 616, matching
+  `node run-tests.js`; `deno task kixx` prints commands, exits 1;
+  `deno task kixx admin gen-secure-token` exits 0; docs grep for
+  `npm run|node run-tests` — no hits.
 - Blockers: None.
 
 ---
 
 ### Task RD-3: Replace the filesystem command registry with static imports
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RD-2
 **Documentation:** `commands/README.md`; `test/README.md`;
 `agents/docs/code-style-guide.md`
@@ -330,17 +375,17 @@ cannot run from a JSR install, and lets `deno publish`, `deno install`, and
 
 **Acceptance criteria**
 
-- [ ] `grep -rn "readdir\|import.meta.url\|pathToFileURL" lib/command-registry.js kixx.js`
+- [x] `grep -rn "readdir\|import.meta.url\|pathToFileURL" lib/command-registry.js kixx.js`
       returns nothing.
-- [ ] Help at every level (`kixx.js`, `kixx.js app --help`,
+- [x] Help at every level (`kixx.js`, `kixx.js app --help`,
       `kixx.js app publish --help`) is byte-identical to the output before
       this task, except for intentional ordering decisions recorded in the
       handoff notes.
-- [ ] Unknown command and unknown sub-command produce the same messages and
+- [x] Unknown command and unknown sub-command produce the same messages and
       exit code `1` as before.
-- [ ] The conformance test passes, and fails if a sub-command file is not
+- [x] The conformance test passes, and fails if a sub-command file is not
       registered (check this by temporarily removing one entry).
-- [ ] `deno task check`, `deno task lint`, `deno task test`, and
+- [x] `deno task check`, `deno task lint`, `deno task test`, and
       `deno task test:node` pass.
 
 **Validation**
@@ -354,19 +399,56 @@ cannot run from a JSR install, and lets `deno publish`, `deno install`, and
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: descriptions inlined into all 19 sub-command classes (circular
+  `import { subcommands } from './index.js'` removed); each
+  `commands/<command>/index.js` imports its classes; new `commands/index.js`
+  default-exports `{ admin, app, cloudflare }` namespaces; `CommandRegistry`
+  rewritten as a static lookup; `kixx.js` builds it from the map;
+  conformance and registry unit tests added; `commands/README.md` updated.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - Ordering: commands list alphabetically (`localeCompare`, as before);
+    sub-commands list in `subcommands` **declaration order**, which is what
+    the old code did (`Object.entries` of the index map). Not alphabetical,
+    e.g. cloudflare lists `bootstrap` first. Preserved.
+  - `CommandRegistry` methods are now synchronous; `kixx.js` dropped the
+    `await`s. Lookups use `Object.hasOwn` so `kixx app constructor` and
+    `kixx constructor` are "does not exist" rather than resolving
+    `Object.prototype` members.
+  - The import in `kixx.js` is `commandModules` (a local `commands` variable
+    already exists in `main()`). `kixx.js` still imports `node:path` (used
+    for the Cloudflare config filepath); `node:url` import removed.
+  - Registry no longer validates that a sub-command is a function at
+    runtime; the conformance test owns that.
+  - Conformance test is `test/unit-tests/commands/index.test.js` (mirrors
+    `commands/index.js`). It checks command directories ⇄ map keys, `.js`
+    basenames ⇄ `subcommands` keys, each value `===` that module's default
+    export, and the static contract types. RD-4 can add the `-v` short-flag
+    check there.
+  - `test/unit-tests/commands/cloudflare/bootstrap.test.js` compared
+    descriptions via `subcommands`; it now asserts
+    `subcommands.bootstrap === CloudflareBootstrapCommand`.
+- Actual files changed: `commands/index.js` (new);
+  `commands/{admin,app,cloudflare}/index.js`; 19 `commands/*/*.js`
+  sub-command modules; `lib/command-registry.js`; `kixx.js`;
+  `commands/README.md`; `test/unit-tests/commands/index.test.js` (new);
+  `test/unit-tests/lib/command-registry.test.js` (new);
+  `test/unit-tests/commands/cloudflare/bootstrap.test.js`.
+- Validation run: help/error capture (top level, 3 commands, 3 sub-command
+  `--help`, no args, unknown command, unknown sub-command, missing
+  sub-command) diffed byte-identical before/after, exit codes included;
+  conformance test failed when `list-migrations` was removed from
+  `commands/admin/index.js`, passed after restore; `deno task check`,
+  `lint`, `test` (631), `test:node` (631) all exit 0; acceptance grep — no
+  hits.
 - Blockers: None.
 
 ---
 
 ### Task RD-4: Rename the program to `kixx` and add `--version`
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RD-3
 **Documentation:** `README.md`; `commands/README.md`; `docs/*.md`
 
@@ -419,12 +501,12 @@ executable. `kixx --version` and `kixx -v` print the package version from
 
 **Acceptance criteria**
 
-- [ ] `grep -rn "kixx\.js" lib commands docs README.md` returns only
+- [x] `grep -rn "kixx\.js" lib commands docs README.md` returns only
       references to the source file.
-- [ ] `deno task kixx --version` and `deno task kixx -v` print `0.1.0` and
+- [x] `deno task kixx --version` and `deno task kixx -v` print `0.1.0` and
       exit `0`. So does `node kixx.js --version`.
-- [ ] Top-level help lists `--version`.
-- [ ] Tests cover `--version` and the updated strings. All tasks pass.
+- [x] Top-level help lists `--version`.
+- [x] Tests cover `--version` and the updated strings. All tasks pass.
 
 **Validation**
 
@@ -434,19 +516,60 @@ executable. `kixx --version` and `kixx -v` print the package version from
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: every runnable hint, usage line, and `triggered_by` value says
+  `kixx`; `--version`/`-v` added; tests and docs updated.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - `--version`/`-v` is checked first in `main()`, before help and command
+    resolution. Because the top-level `parseArgs` is non-strict over the whole
+    argv, `kixx app publish -v` also prints the version (the recommended
+    choice). Same caveat as `-h` today: `--some-string-option -v` would be
+    read as the version flag.
+  - Top-level help (no args, `--help`, unknown command) now renders an
+    `Options:` section with `--help` and `--version`; it had none before.
+    Sub-command help also lists `--version` (global options are merged).
+  - **Linter:** `import ... with { type: 'json' }` is ES2025; the linter
+    rejected it at `ecmaVersion: 2022`. `eslint.config.js` now uses
+    `ecmaVersion: 2025` globally, and `agents/docs/code-style-guide.md`
+    (Language Standard) allows JSON import attributes as the one post-2022
+    feature. A per-file override was tried and rejected: in `kixx-linting`,
+    once any config object has `files`, only files matching some `files`
+    entry are linted, so it silently stopped linting everything but
+    `kixx.js`. Do not add `files` to `eslint.config.js` without listing every
+    target.
+  - Test coverage of `--version` needs a subprocess:
+    `test/unit-tests/kixx.test.js` runs `kixx.js` with `process.execPath`
+    (on Deno with `run -RWNE --allow-sys=homedir --no-prompt`, so it also
+    guards the user permission set). The `test` task gained `--allow-run`
+    (dev only; the CLI permission set is unchanged).
+  - `test/unit-tests/commands/index.test.js` now rejects sub-command options
+    named `help`/`version` or with short `h`/`v`. Verified it fails by
+    temporarily giving `gen-secure-token` `short: 'v'`.
+  - `docs/cloudflare.md` had `node kixx.js cloudflare deploy-version`; now
+    `kixx cloudflare deploy-version`.
+  - Kept as source-file references: `README.md:9`, `commands/README.md:4,33`.
+- Actual files changed: `kixx.js`; `eslint.config.js`; `deno.json` (`test`
+  task `--allow-run`); `agents/docs/code-style-guide.md`;
+  `lib/cloudflare/create-worker-version.js`;
+  `commands/admin/run-migration.js`, `commands/app/publish.js`,
+  `commands/cloudflare/{bootstrap,delete-secret,set-secret,set-secrets}.js`;
+  `docs/{admin,app,cloudflare}.md`; `README.md`; `commands/README.md`;
+  tests: `test/unit-tests/kixx.test.js` (new),
+  `test/unit-tests/commands/index.test.js`,
+  `test/unit-tests/commands/cloudflare/{bootstrap,delete-secret,set-secret,set-secrets}.test.js`,
+  `test/unit-tests/lib/cloudflare/{cloudflare-api-client,create-worker-version,manage-worker-secrets}.test.js`.
+- Validation run: `deno task kixx -v` → `0.1.0`, exit 0; `deno task kixx
+  --version` and `node kixx.js --version` → `0.1.0`; acceptance grep shows
+  only the three source-file references; `deno task check`, `lint`, `test`
+  (634), `test:node` (634) all exit 0.
 - Blockers: None.
 
 ---
 
 ### Task RD-5: Define the npm and JSR package contents
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RD-4
 **Documentation:** `README.md`
 
@@ -498,11 +621,11 @@ what the CLI needs, and a unit test keeps the two manifests consistent.
 
 **Acceptance criteria**
 
-- [ ] `npm pack --dry-run` lists only `kixx.js`, `commands/**`, `lib/**`,
+- [x] `npm pack --dry-run` lists only `kixx.js`, `commands/**`, `lib/**`,
       `deno.json`, `README.md`, `LICENSE`, and `package.json`.
-- [ ] `deno publish --dry-run` succeeds, its file list matches the
+- [x] `deno publish --dry-run` succeeds, its file list matches the
       intended set, and its only warnings are the accepted ones.
-- [ ] The consistency test passes, and fails when either version is changed
+- [x] The consistency test passes, and fails when either version is changed
       alone.
 
 **Validation**
@@ -513,19 +636,45 @@ what the CLI needs, and a unit test keeps the two manifests consistent.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: `package.json` `bin`/`files`; `deno.json` `publish`
+  include/exclude (`exports` was added in RD-2); README doc links made
+  absolute; `test/unit-tests/manifests.test.js` added.
+- Current state: Complete.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - `commands/README.md` is **excluded** from both packages (developer-only
+    contract for adding commands): `"!commands/README.md"` in npm `files`,
+    `publish.exclude` in `deno.json`.
+  - Both packages ship the same 114 files (npm adds `package.json`): 23
+    under `commands/` (19 sub-commands, 3 command indexes,
+    `commands/index.js`), 87 under `lib/` (34 in `lib/vendor/`), `kixx.js`,
+    `deno.json`, `README.md`, `LICENSE`. JSR includes `deno.json`
+    automatically, confirmed in the dry run.
+  - `deno publish --dry-run` warnings, both expected:
+    `unsupported-javascript-entrypoint` (accepted), and
+    `unanalyzable-dynamic-import` at `lib/cloudflare-config-loader.js:31`
+    (loads the user's `cloudflare-config.js`; DK-2 removes it). No
+    registry-related dynamic-import warnings remain after RD-3.
+  - The dry run needs `--allow-dirty` on an uncommitted tree; the release
+    workflow (RD-7) publishes from a clean tag checkout and does not.
+  - README links use reference-style definitions pointing at
+    `https://github.com/kixx-framework/kixx-devkit/blob/main/...` (`main` is
+    the remote default branch).
+  - `kixx.js` is mode `100755` in git; shebang `#!/usr/bin/env node` kept.
+- Actual files changed: `package.json`, `deno.json`, `README.md`,
+  `test/unit-tests/manifests.test.js` (new).
+- Validation run: `npm pack --dry-run` — 115 files, the set above;
+  `deno publish --dry-run --allow-dirty` — exit 0, 2 expected warnings;
+  manifest test passes, and failed when only `package.json` was set to
+  `0.1.1` and when only `deno.json` was set to `0.2.0` (both restored);
+  `deno task check`, `lint`, `test` (637), `test:node` (637) all exit 0.
 - Blockers: None.
 
 ---
 
 ### Task RD-6: Verify installed executables and document installation
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RD-5
 **Documentation:** `README.md`; `docs/configuration.md`
 
@@ -582,9 +731,9 @@ correct.
 
 **Acceptance criteria**
 
-- [ ] Both installed executables pass every check above.
-- [ ] No `NotCapable` error under `-RWNE --allow-sys=homedir --no-prompt`.
-- [ ] README install instructions match what was tested.
+- [x] Both installed executables pass every check above.
+- [x] No `NotCapable` error under `-RWNE --allow-sys=homedir --no-prompt`.
+- [x] README install instructions match what was tested.
 
 **Validation**
 
@@ -594,19 +743,54 @@ correct.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: npm tarball and local Deno entry point installed into scratch
+  roots; every check passed on both; README Install section and a
+  `docs/configuration.md` permission note added. No code defects found in
+  this task (the `fs.access` → `fs.stat` fix for `sys=uid` was already made
+  in RD-2).
+- Current state: Complete.
+- Remaining: Nothing. Installing from the live registries is RD-8.
+- Decisions and discoveries:
+  - Test harness: a throwaway project in the agent scratchpad (not
+    `tmp/sample-app`, which holds secrets files) with `.kixx/config.json`
+    origins at `http://127.0.0.1:59999`, empty `secrets.json`, and
+    `cloudflare-config.js` exporting `{}`. Every run used `HOME=<scratch>/home`
+    so the user's real `~/.kixx` layer could not supply credentials, and
+    `DENO_NO_PROMPT=1` so a missing permission fails.
+  - Use an unblocked port for network checks: Node's fetch rejects port 9
+    ("bad port", a fetch-spec blocked port) without connecting.
+  - Interactive prompts verified through a pseudo-terminal
+    (`script -q /dev/null kixx ...` with paced input; unpaced piped input
+    reaches EOF before the prompt reads).
+  - `deno install` of a local path writes a shim that runs the source file in
+    place with `--config <root>/bin/.kixx/deno.json`; the JSR install is
+    verified in RD-8.
+  - Neither `lib/`, `commands/`, nor `kixx.js` uses `child_process`,
+    `Deno.Command`, or FFI.
+- Actual files changed: `README.md` (Install section),
+  `docs/configuration.md` (permission note).
+- Validation run (identical results for `<scratch>/npm/bin/kixx` and
+  `<scratch>/deno/bin/kixx`):
+  - no args → command list, exit 1; `--help` → exit 0; `--version` →
+    `0.1.0`, exit 0.
+  - `admin gen-secure-token` → 64-hex token, exit 0.
+  - `admin accept-invite -e rd6check` with env-var inputs and with TTY
+    prompts → `AdminApiError` caused by `ECONNREFUSED` (Node) /
+    `Connection refused (os error 61)` (Deno), exit 1.
+  - `cloudflare deploy-version -e production` → loads `cloudflare-config.js`
+    and `.kixx`, then `Missing required secrets ... cloudflare.accountId,
+    cloudflare.apiToken`, exit 1.
+  - `app publish --help` → exit 0; `app publish -e rd6check` →
+    `Missing required setting app.environments.rd6check.publishingToken`,
+    exit 1.
+  - No `NotCapable` anywhere. `deno install -g -f ...` reinstall works.
 - Blockers: None.
 
 ---
 
 ### Task RD-7: Add the tag-triggered release workflow
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** RD-5
 **Documentation:** `README.md`
 
@@ -650,11 +834,11 @@ partial failure completes the release.
 
 **Acceptance criteria**
 
-- [ ] The workflow file is valid YAML and the logic matches the steps above.
-- [ ] The skip checks work, verified locally against the registries for an
+- [x] The workflow file is valid YAML and the logic matches the steps above.
+- [x] The skip checks work, verified locally against the registries for an
       existing package version and a nonexistent one, e.g. `curl` the JSR
       meta URL and `npm view` for a known package.
-- [ ] README documents the release procedure.
+- [x] README documents the release procedure.
 
 **Validation**
 
@@ -665,19 +849,49 @@ partial failure completes the release.
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
+- Completed: `.github/workflows/release.yml` and the README "Releasing"
+  section.
+- Current state: Complete. The workflow has never run; RD-8 is its first
+  real run.
+- Remaining: Nothing.
+- Decisions and discoveries:
+  - Actions pinned to commit SHAs (tags dereferenced with `git ls-remote`):
+    `actions/checkout` v7.0.1 `3d3c42e5…`, `denoland/setup-deno` v2.0.5
+    `22d081ff…` with `deno-version: 2.8.x`, `actions/setup-node` v7.0.0
+    `82076278…` with `node-version: 24` and `registry-url`.
+  - npm docs (fetched 2026-10-05): trusted publishing needs npm >= 11.5.1
+    and Node >= 22.14.0; provenance is automatic (the `--provenance` flag is
+    kept as the plan asked; harmless); **`package.json` `repository.url`
+    must exactly match the GitHub repository**. Currently
+    `https://github.com/kixx-framework/kixx-devkit.git`. If the npm trusted
+    publish fails with a provenance/repository mismatch in RD-8, check this
+    first. The npm step upgrades npm to `npm@11` only when the bundled npm is
+    older than 11.5.1 (`sort -V` compare; no extra packages). Local Node
+    24.13.1 bundles npm 11.12.1.
+  - JSR skip check: `meta.json` returns 404 for a package with no versions
+    (currently `@kixx/devkit`), so 404 means "publish"; any status other than
+    200/404 fails the job. The meta file is written to `$RUNNER_TEMP`
+    because `deno publish` refuses a dirty working tree.
+  - npm skip check compares `npm view kixx-devkit@<v> version` output to the
+    version rather than trusting the exit code.
+  - Step scripts use the variable name `status`, which is read-only in zsh;
+    they run in bash on the runner. Test them locally with `bash`, not zsh.
+- Actual files changed: `.github/workflows/release.yml` (new), `README.md`.
+- Validation run: `actionlint` not installed (not installed per AGENTS.md);
+  YAML parsed with `jsr:@std/yaml` via `deno eval` (trigger `push.tags: v*`,
+  permissions `contents: read`, `id-token: write`, 10 steps in order).
+  Skip logic run under bash: `@std/cli@0.207.0` skip, `@std/cli@99.0.0`
+  publish (200), `@kixx/devkit@0.1.0` publish (404); `kixx-test@3.0.0`
+  skip, `kixx-test@99.9.9` and `kixx-devkit@0.1.0` publish; npm version
+  gate: 11.4.2 and 10.9.0 upgrade, 11.5.1 and 11.12.1 do not; tag `v0.1.0`
+  matches both manifests.
 - Blockers: None.
 
 ---
 
 ### Task RD-8: Publish 0.1.0 to npm and JSR
 
-**Status:** Not started
+**Status:** Blocked
 **Depends on:** RD-6, RD-7, DK-2, DK-3 (`deno-single-executable.md`)
 **Documentation:** `README.md`
 
@@ -733,9 +947,13 @@ install a working `kixx` from the live registries.
 **Progress and handoff**
 
 - Completed: Nothing yet.
-- Current state: Not started.
+- Current state: Blocked. RD-1 through RD-7 are complete; nothing is
+  committed yet (all work is in the working tree on branch `distribution`).
 - Remaining: Everything described above.
 - Decisions and discoveries: None yet.
 - Actual files changed: None yet.
 - Validation run: None yet.
-- Blockers: Requires the user's registry accounts.
+- Blockers: DK-2 and DK-3 in `deno-single-executable.md` are Not started
+  (checked 2026-10-05). After they land, the user's registry steps above.
+  Re-run `deno publish --dry-run`: the `unanalyzable-dynamic-import`
+  warning from `lib/cloudflare-config-loader.js` should be gone after DK-2.

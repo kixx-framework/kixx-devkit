@@ -168,7 +168,14 @@ devkit no longer executes project code to read configuration.
 - Completed: Nothing yet.
 - Current state: Not started.
 - Remaining: Everything described above.
-- Decisions and discoveries: None yet.
+- Decisions and discoveries:
+  - 2026-10-05: `kixx-devkit@0.1.0` (npm) and `@kixx/devkit@0.1.0` (JSR)
+    were published before this task, contrary to the JSONC prerequisite in
+    `remote-cli-distribution.md`. Published users may have
+    `cloudflare-config.js`, so the legacy-file guard and migration note are
+    a real upgrade path, not a formality. Ship DK-2 in a release whose
+    version signals a breaking config change (0.x minor bump, e.g. 0.2.0),
+    and say so in its release notes.
 - Actual files changed: None yet.
 - Validation run: None yet.
 - Blockers: None.

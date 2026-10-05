@@ -75,7 +75,9 @@ Cross-cutting decisions (made with the user; do not revisit):
 - **Versions.** First public release `0.1.0`. Node `>=24`. Deno `>=2.8`.
 - **JSONC prerequisite.** The `cloudflare-config.jsonc` work (tasks DK-2 and
   DK-3 in `deno-single-executable.md`) lands before the first public publish
-  so no published user ever migrates config formats.
+  so no published user ever migrates config formats. **Not met:** 0.1.0 was
+  published before DK-2 and DK-3, and reads `cloudflare-config.js`. DK-2 is
+  now a config-format change for published users (see RD-8 handoff).
 - **Out of scope:** `deno compile` binaries (DK-4), CI on push/PR, Windows
   path testing, a library API, and writing to the JSONC config.
 
@@ -891,7 +893,7 @@ partial failure completes the release.
 
 ### Task RD-8: Publish 0.1.0 to npm and JSR
 
-**Status:** Blocked
+**Status:** Complete
 **Depends on:** RD-6, RD-7, DK-2, DK-3 (`deno-single-executable.md`)
 **Documentation:** `README.md`
 
@@ -927,18 +929,19 @@ Every step below is performed by the maintainer. Commands assume the
 repository root.
 
 0. Preconditions.
-   - DK-2 and DK-3 are complete and their work is merged.
-   - `distribution` is merged into `main`. README doc links point at
+   - [ ] DK-2 and DK-3 are complete and their work is merged. **Not met at
+     release:** both were still Not started; 0.1.0 shipped without them.
+   - [x] `distribution` is merged into `main`. README doc links point at
      `blob/main/...`, so the docs must be on `main` before the packages
      appear on the registries.
-   - `deno.json` and `package.json` both say `"version": "0.1.0"`.
-   - The name is still free: `npm view kixx-devkit` returns `E404`.
-   - Record the release commit: `git rev-parse origin/main`.
+   - [x] `deno.json` and `package.json` both say `"version": "0.1.0"`.
+   - [x] The name is still free: `npm view kixx-devkit` returns `E404`.
+   - [x] Record the release commit: `git rev-parse origin/main`. `0b639e4653dd3748644ca37cc5a412245403af36`
 
 1. Create the JSR package.
-   - Go to <https://jsr.io/new>. Scope `@kixx`, package name `devkit`.
+   - [x] Go to <https://jsr.io/new>. Scope `@kixx`, package name `devkit`.
      Create it.
-   - Open `https://jsr.io/@kixx/devkit` → Settings. Under GitHub
+   - [x] Open `https://jsr.io/@kixx/devkit` → Settings. Under GitHub
      repository, enter `kixx-framework/kixx-devkit` and click Link.
 
 2. Publish to npm by hand from a clean checkout of the release commit.
@@ -1007,13 +1010,13 @@ a repository mismatch, check that `package.json` `repository.url` matches
 
 **Acceptance criteria**
 
-- [ ] `npm view kixx-devkit@0.1.0` and `https://jsr.io/@kixx/devkit/meta.json`
+- [x] `npm view kixx-devkit@0.1.0` and `https://jsr.io/@kixx/devkit/meta.json`
       show 0.1.0.
-- [ ] `npm install -g --prefix <scratch> kixx-devkit` and
+- [x] `npm install -g --prefix <scratch> kixx-devkit` and
       `deno install -g --root <scratch> -RWNE --allow-sys=homedir jsr:@kixx/devkit/kixx`
       both install an executable named `kixx` that prints `0.1.0` for
       `--version`. The Deno install works without `--name`.
-- [ ] The RD-6 command checks pass on both registry installs.
+- [x] The RD-6 command checks pass on both registry installs.
 
 **Validation**
 
@@ -1022,15 +1025,51 @@ a repository mismatch, check that `package.json` `repository.url` matches
 
 **Progress and handoff**
 
-- Completed: Nothing yet.
-- Current state: Blocked. RD-1 through RD-7 are complete and committed on
-  branch `distribution` (not yet merged to `main` or pushed). The operator
-  runbook above is written.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
-- Blockers: DK-2 and DK-3 in `deno-single-executable.md` are Not started
-  (checked 2026-10-05). After they land, the operator runbook above.
-  Re-run `deno publish --dry-run`: the `unanalyzable-dynamic-import`
-  warning from `lib/cloudflare-config-loader.js` should be gone after DK-2.
+- Completed: the maintainer ran runbook steps 1 to 4 on 2026-10-05:
+  `kixx-devkit@0.1.0` published to npm by hand, `@kixx/devkit@0.1.0`
+  published to JSR by the Release workflow from tag `v0.1.0`. The agent
+  verified both registries and both installs.
+- Current state: Complete, with one documented exception (below).
+- Remaining: Nothing in this plan. Follow-ups: DK-2 and DK-3, and turning
+  on npm "Require two-factor authentication and disallow tokens" after the
+  first tag-driven npm publish works.
+- Decisions and discoveries:
+  - **Exception: released without DK-2/DK-3.** Release commit `0b639e4`
+    (merge of PR #9) still loads `cloudflare-config.js`. The JSONC
+    prerequisite decision was not met, so published users may already have
+    `cloudflare-config.js` files. DK-2's legacy-file guard and migration
+    note now serve real users; the DK-2 handoff records this.
+  - Release commit and tag: `v0.1.0` → `0b639e4653dd3748644ca37cc5a412245403af36`,
+    which is also `origin/main`.
+  - Workflow run `37349588841` (25s, success): version check passed; 637
+    tests passed on Deno and on Node; "Publish to JSR" printed
+    `Successfully published @kixx/devkit@0.1.0` with a Sigstore
+    provenance log entry; "Publish to npm" printed
+    `npm already has kixx-devkit@0.1.0; skipping.` JSR warnings were the
+    two expected ones, including `unanalyzable-dynamic-import` at
+    `lib/cloudflare-config-loader.js:31` (still present because DK-2 has
+    not landed).
+  - npm `0.1.0` has no provenance (manual first publish, as planned). The
+    first provenance publish to npm is the next tag-driven release.
+  - The JSR install of `jsr:@kixx/devkit/kixx` loads the project's local
+    `cloudflare-config.js` through a dynamic `import()`, which confirms the
+    planning fact that a module from a remote URL can import a local
+    `file://` module.
+- Actual files changed: none in the repository (only this plan and the
+  DK-2 handoff in `deno-single-executable.md`).
+- Validation run (2026-10-05, agent):
+  - `npm view kixx-devkit@0.1.0 version` → `0.1.0`;
+    `https://jsr.io/@kixx/devkit/meta.json` → `latest: 0.1.0`,
+    versions `[0.1.0]`.
+  - `npm install -g --prefix <scratch>/npm kixx-devkit` and
+    `deno install -g --root <scratch>/deno -RWNE --allow-sys=homedir jsr:@kixx/devkit/kixx`
+    (no `--name`) each installed `bin/kixx`; both print `0.1.0` for
+    `--version`.
+  - RD-6 checks on both installs, using the RD-6 harness (scratch project,
+    `HOME=<scratch>/home`, `DENO_NO_PROMPT=1`): no args exit 1; `--help`
+    exit 0; `admin gen-secure-token` exit 0; `admin accept-invite` with env
+    inputs and with TTY prompts (Deno) fails on connection refused;
+    `cloudflare deploy-version -e production` loads config, then
+    `Missing required secrets`; `app publish --help` exit 0;
+    `app publish -e rd8check` → missing `publishingToken`. No `NotCapable`.
+- Blockers: None.

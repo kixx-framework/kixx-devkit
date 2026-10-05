@@ -136,7 +136,7 @@ Always run the linter when you change JavaScript files for the Node.js or Cloudf
 
 ### Linting
 
-Run the linter according to the instructions in the `README.md` for every JavaScript source file you changed during your task. Fix any linting errors you find for the code you have written during your task before you are done.
+Run the linter with `deno task lint` (see the Development section of `README.md`) after changing any JavaScript source file during your task. Fix any linting errors you find for the code you have written during your task before you are done.
 
 Helpful Tips
 ------------

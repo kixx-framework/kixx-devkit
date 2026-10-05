@@ -1,0 +1,19 @@
+{
+    "name": "@kixx/devkit",
+    "version": "0.1.0",
+    "exports": {
+        "./kixx": "./kixx.js"
+    },
+    "nodeModulesDir": "auto",
+    "imports": {
+        "kixx-linting": "npm:kixx-linting@1.1.2",
+        "kixx-test": "npm:kixx-test@3.0.0"
+    },
+    "tasks": {
+        "lint": "deno run -R --allow-sys=uid run-linter.js",
+        "test": "deno run -RWE --allow-sys=uid run-tests.js",
+        "test:node": "deno install && node run-tests.js",
+        "check": "deno check kixx.js run-tests.js run-linter.js",
+        "kixx": "deno run -RWNE --allow-sys=homedir kixx.js"
+    }
+}

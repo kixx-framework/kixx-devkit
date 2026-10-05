@@ -43,30 +43,47 @@ before any write; see [app.md](docs/app.md#server-requirement).
 Development
 -----------
 
+Development uses Deno 2.8 or later. Releases also run the test suite on
+Node.js 24 or later. Dev dependencies are pinned in `deno.json` and installed
+into `node_modules/` on first use; there is no npm step.
+
+Type-check the entry points:
+
+```
+deno task check
+```
+
 Run the linter over the project's JavaScript sources:
 
 ```
-npm run lint
+deno task lint
 ```
 
 Run the unit test suite:
 
 ```
-node run-tests.js
+deno task test
 ```
 
 `run-tests.js` runs every `*.test.js` file under `test/unit-tests/`. Pass
 pathnames to run a subset, or `--skip <path>` (repeatable) to exclude one:
 
 ```
-node run-tests.js test/unit-tests/lib
-node run-tests.js --skip test/unit-tests/lib/config-loader.test.js
+deno task test test/unit-tests/lib
+deno task test --skip test/unit-tests/lib/config-loader.test.js
 ```
 
-Run both, linter first:
+Run the unit test suite on Node.js (accepts the same arguments):
 
 ```
-npm test
+deno task test:node
+```
+
+Run the CLI from source, with the same Deno permissions an installed `kixx`
+gets:
+
+```
+deno task kixx <command> <subcommand> [options]
 ```
 
 Copyright and License

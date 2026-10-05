@@ -195,11 +195,11 @@ exporting `description` and `subcommands`.
 Then verify:
 
 ```
-node kixx.js                            # the command lists
-node kixx.js <command> --help           # the sub-command lists
-node kixx.js <command> <subcommand> --help
-node kixx.js <command> <subcommand>     # the real thing
-npm run lint
+deno task kixx                            # the command lists
+deno task kixx <command> --help           # the sub-command lists
+deno task kixx <command> <subcommand> --help
+deno task kixx <command> <subcommand>     # the real thing
+deno task lint
 ```
 
 Shared logic belongs in `lib/`, not in a command module. A command should read

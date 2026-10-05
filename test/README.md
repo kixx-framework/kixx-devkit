@@ -7,6 +7,8 @@ This project uses two ES module libraries:
 
 The project test runner imports test files first, which register top-level `describe` blocks, then executes the registered tests.
 
+Run the suite with `deno task test`, and on Node.js with `deno task test:node`. Both accept pathnames and `--skip <path>`; see the Development section of the project `README.md`.
+
 ## File Conventions
 
 - Name test files with the project convention `*.test.js`, for example `test/lib/config-loader.test.js`.

@@ -4,13 +4,12 @@ import PublishingAPIClient from '../../lib/publishing/publishing-api-client.js';
 import deployCloudflareVersion from '../../lib/release/deploy-cloudflare-version.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 // The Worker name is environment-scoped, so it cannot be declared through
 // requiredCloudflareConfig before --environment has been parsed.
 export default class CloudflareDeployVersionCommand {
 
-    static description = subcommands['deploy-version'].description;
+    static description = 'Route all traffic to an existing Cloudflare Worker version';
 
     static options = {
         environment: {

@@ -5,7 +5,7 @@ import { subcommands } from '../../../../commands/cloudflare/index.js';
 
 describe('CloudflareBootstrapCommand', ({ it }) => {
     it('is registered with the expected CLI contract', () => {
-        assertEqual(subcommands.bootstrap.description, CloudflareBootstrapCommand.description);
+        assertEqual(CloudflareBootstrapCommand, subcommands.bootstrap);
         assertEqual('string', CloudflareBootstrapCommand.options.environment.type);
         assertEqual('e', CloudflareBootstrapCommand.options.environment.short);
         assertEqual('dotenv-file', CloudflareBootstrapCommand.positionals[0].name);

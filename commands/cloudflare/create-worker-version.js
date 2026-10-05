@@ -6,7 +6,6 @@ import { readWorkerVersionState } from '../../lib/cloudflare/worker-version-stat
 import defaultFileSystem from '../../lib/file-system.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 // requiredCloudflareConfig is deliberately not declared. Every config path
 // this command needs is under environments.<environment>, which is not
@@ -15,7 +14,7 @@ import { subcommands } from './index.js';
 // Config validation stays inside createWorkerVersion() instead.
 export default class CloudflareCreateWorkerVersionCommand {
 
-    static description = subcommands['create-worker-version'].description;
+    static description = 'Bundle, hash, and idempotently upload a Cloudflare Worker version';
 
     static options = {
         environment: {

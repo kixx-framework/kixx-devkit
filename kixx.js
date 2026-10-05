@@ -3,7 +3,7 @@
 import process from 'node:process';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { fileURLToPath } from 'node:url';
+import commandModules from './commands/index.js';
 import CommandRegistry from './lib/command-registry.js';
 import UsageError from './lib/usage-error.js';
 import { CONSOLE_LINE_WIDTH, wrapText, wrapWords } from './lib/text-wrap.js';
@@ -219,16 +219,14 @@ async function main() {
         },
     });
 
-    const devkitInstallDirectory = path.dirname(fileURLToPath(import.meta.url));
-
-    const commandRegistry = new CommandRegistry(path.join(devkitInstallDirectory, 'commands'));
+    const commandRegistry = new CommandRegistry(commandModules);
 
     const [ commandName, subCommandName ] = args.positionals;
 
     if (commandName) {
-        const commandExists = await commandRegistry.commandExists(commandName);
+        const commandExists = commandRegistry.commandExists(commandName);
         if (!commandExists) {
-            const commands = await commandRegistry.listCommands();
+            const commands = commandRegistry.listCommands();
             renderHelp({
                 message: `The top level command "${ commandName }" does not exist.`,
                 usage: '<command> <subcommand> [options] <...args>',
@@ -241,9 +239,9 @@ async function main() {
     let Command;
 
     if (commandName && subCommandName) {
-        Command = await commandRegistry.resolveCommand(commandName, subCommandName);
+        Command = commandRegistry.resolveCommand(commandName, subCommandName);
         if (!Command) {
-            const subCommands = await commandRegistry.listSubCommands(commandName);
+            const subCommands = commandRegistry.listSubCommands(commandName);
             renderHelp({
                 message: `The "${ commandName } ${ subCommandName }" sub command does not exist.`,
                 usage: `${ commandName } <subcommand> [options] <...args>`,
@@ -267,14 +265,14 @@ async function main() {
             return 0;
         }
         if (!commandName) {
-            const commands = await commandRegistry.listCommands();
+            const commands = commandRegistry.listCommands();
             renderHelp({
                 usage: '<command> <subcommand> [options] <...args>',
                 commands,
             });
             return 0;
         }
-        const subCommands = await commandRegistry.listSubCommands(commandName);
+        const subCommands = commandRegistry.listSubCommands(commandName);
         renderHelp({
             usage: `${ commandName } <subcommand> [options] <...args>`,
             subCommands,
@@ -283,7 +281,7 @@ async function main() {
     }
 
     if (!commandName) {
-        const commands = await commandRegistry.listCommands();
+        const commands = commandRegistry.listCommands();
         renderHelp({
             message: 'A top level command name is required as the first argument.',
             usage: '<command> <subcommand> [options] <...args>',
@@ -293,7 +291,7 @@ async function main() {
     }
 
     if (!subCommandName) {
-        const subCommands = await commandRegistry.listSubCommands(commandName);
+        const subCommands = commandRegistry.listSubCommands(commandName);
         renderHelp({
             message: 'A subcommand name is required as the second argument.',
             usage: `${ commandName } <subcommand> [options] <...args>`,

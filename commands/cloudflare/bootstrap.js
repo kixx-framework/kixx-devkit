@@ -10,11 +10,10 @@ import defaultFileSystem from '../../lib/file-system.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
 import { renderCreated, renderProvisioned, renderResourcesResolved } from './create-worker-version.js';
-import { subcommands } from './index.js';
 
 export default class CloudflareBootstrapCommand {
 
-    static description = subcommands.bootstrap.description;
+    static description = 'Create the Worker when missing and deploy its first version with initial secrets';
 
     static options = {
         environment: {

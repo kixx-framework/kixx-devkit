@@ -4,13 +4,12 @@ import { deleteWorkerSecret } from '../../lib/cloudflare/manage-worker-secrets.j
 import defaultFileSystem from '../../lib/file-system.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 const COMMAND_NAME = 'kixx.js cloudflare delete-secret';
 
 export default class CloudflareDeleteSecretCommand {
 
-    static description = subcommands['delete-secret'].description;
+    static description = 'Create an undeployed Worker version with one removed secret';
 
     static options = {
         environment: {

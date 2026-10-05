@@ -5,11 +5,10 @@ import assignRelease from '../../lib/publishing/assign-release.js';
 import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 export default class AppRollbackCommand {
 
-    static description = subcommands.rollback.description;
+    static description = 'List build history or assign an earlier Release to a build';
     static options = {
         environment: { type: 'string', short: 'e', description: 'Required application environment' },
         'build-id': { type: 'string', description: 'Required build pointer id' },

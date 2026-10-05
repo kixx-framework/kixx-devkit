@@ -5,13 +5,12 @@ import defaultFileSystem from '../../lib/file-system.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import { readSecretValue } from '../../lib/prompt.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 const COMMAND_NAME = 'kixx.js cloudflare set-secret';
 
 export default class CloudflareSetSecretCommand {
 
-    static description = subcommands['set-secret'].description;
+    static description = 'Create an undeployed Worker version with one added or replaced secret';
 
     static options = {
         environment: {

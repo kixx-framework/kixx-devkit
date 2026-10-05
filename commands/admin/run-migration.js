@@ -10,11 +10,12 @@ import {
 import { promptForValue, promptForConfirmation } from '../../lib/prompt.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 export default class AdminRunMigrationCommand {
 
-    static description = subcommands['run-migration'].description;
+    static description = `
+        Run one bounded batch of a migration, in dry-run or real mode
+    `;
 
     static positionals = [
         { name: 'id', description: 'Permanent migration id from list-migrations', required: true },

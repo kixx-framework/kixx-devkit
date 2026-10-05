@@ -4,11 +4,13 @@ import { isUndefined } from '../../lib/vendor/kixx-assert/mod.js';
 import resolveAdminEnvironment from '../../lib/admin/resolve-admin-environment.js';
 import { promptForValue } from '../../lib/prompt.js';
 import { wrapText } from '../../lib/text-wrap.js';
-import { subcommands } from './index.js';
 
 export default class AdminCreatePublishingTokenCommand {
 
-    static description = subcommands['create-publishing-token'].description;
+    static description = `
+        Mint a bearer token for the Publishing API, authenticating as an
+        existing admin
+    `;
 
     static options = {
         environment: { type: 'string', short: 'e', description: 'Required application environment' },

@@ -6,13 +6,12 @@ import { readEnvValues } from '../../lib/env-file.js';
 import defaultFileSystem from '../../lib/file-system.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 const COMMAND_NAME = 'kixx.js cloudflare set-secrets';
 
 export default class CloudflareSetSecretsCommand {
 
-    static description = subcommands['set-secrets'].description;
+    static description = 'Create an undeployed Worker version with additive secrets from a dotenv file';
 
     static options = {
         environment: {

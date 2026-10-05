@@ -88,6 +88,7 @@ before any write; see [app.md][app-doc-server-requirement].
 [cloudflare-doc]: https://github.com/kixx-framework/kixx-devkit/blob/main/docs/cloudflare.md
 [admin-doc]: https://github.com/kixx-framework/kixx-devkit/blob/main/docs/admin.md
 [configuration-doc]: https://github.com/kixx-framework/kixx-devkit/blob/main/docs/configuration.md
+[publishing-doc]: https://github.com/kixx-framework/kixx-devkit/blob/main/PUBLISHING.md
 
 Development
 -----------
@@ -138,21 +139,9 @@ deno task kixx <command> <subcommand> [options]
 Releasing
 ---------
 
-`.github/workflows/release.yml` publishes to JSR and npm when a `v<version>`
-tag is pushed. It authenticates with GitHub OIDC (no stored tokens), checks the
-tag against both manifests, runs the checks below, and skips any registry that
-already has the version, so re-running a failed release finishes it.
-
-1. Set the same `version` in `deno.json` and `package.json`.
-2. Run the local validation:
-   ```
-   deno task check && deno task lint && deno task test && deno task test:node
-   ```
-3. Commit, then tag and push the tag:
-   ```
-   git tag v<version>
-   git push origin v<version>
-   ```
+Pushing a `v<version>` tag publishes to npm and JSR. See
+[PUBLISHING.md][publishing-doc] for how distribution and the release workflow
+work, and the steps to publish a release.
 
 Copyright and License
 ---------------------

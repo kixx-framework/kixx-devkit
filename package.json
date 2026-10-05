@@ -3,6 +3,16 @@
     "version": "0.1.0",
     "description": "A developer tool-kit for Kixx applications",
     "type": "module",
+    "bin": {
+        "kixx": "./kixx.js"
+    },
+    "files": [
+        "kixx.js",
+        "commands/",
+        "!commands/README.md",
+        "lib/",
+        "deno.json"
+    ],
     "engines": {
         "node": ">=24"
     },

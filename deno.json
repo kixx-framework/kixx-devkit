@@ -4,6 +4,18 @@
     "exports": {
         "./kixx": "./kixx.js"
     },
+    "publish": {
+        "include": [
+            "kixx.js",
+            "commands/",
+            "lib/",
+            "README.md",
+            "LICENSE"
+        ],
+        "exclude": [
+            "commands/README.md"
+        ]
+    },
     "nodeModulesDir": "auto",
     "imports": {
         "kixx-linting": "npm:kixx-linting@1.1.2",

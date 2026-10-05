@@ -7,8 +7,8 @@ CLI Commands
 ------------
 
 The `kixx.js` CLI dispatches to commands in the `commands/` directory. See
-[commands/README.md](commands/README.md) for how the command runner discovers
-and configures commands, and what to write to add a new one.
+[commands/README.md][commands-readme] for how the command runner discovers and
+configures commands, and what to write to add a new one.
 
 Available workflows:
 
@@ -32,13 +32,20 @@ Available workflows:
 - `kixx admin list-migrations` — list registered migrations and their status.
 - `kixx admin run-migration` — run one bounded batch of a migration.
 
-See [app.md](docs/app.md), [cloudflare.md](docs/cloudflare.md),
-[admin.md](docs/admin.md), and [configuration.md](docs/configuration.md) for
-usage and configuration.
+See [app.md][app-doc], [cloudflare.md][cloudflare-doc], [admin.md][admin-doc],
+and [configuration.md][configuration-doc] for usage and configuration.
 
 Publishing commands require an application serving Publishing API build
 assignment protocol 2 and addressing format 4. Older deployments are refused
-before any write; see [app.md](docs/app.md#server-requirement).
+before any write; see [app.md][app-doc-server-requirement].
+
+<!-- Absolute links so they resolve on npmjs.com and jsr.io as well. -->
+[commands-readme]: https://github.com/kixx-framework/kixx-devkit/blob/main/commands/README.md
+[app-doc]: https://github.com/kixx-framework/kixx-devkit/blob/main/docs/app.md
+[app-doc-server-requirement]: https://github.com/kixx-framework/kixx-devkit/blob/main/docs/app.md#server-requirement
+[cloudflare-doc]: https://github.com/kixx-framework/kixx-devkit/blob/main/docs/cloudflare.md
+[admin-doc]: https://github.com/kixx-framework/kixx-devkit/blob/main/docs/admin.md
+[configuration-doc]: https://github.com/kixx-framework/kixx-devkit/blob/main/docs/configuration.md
 
 Development
 -----------

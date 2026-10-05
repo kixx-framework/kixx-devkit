@@ -911,18 +911,94 @@ install a working `kixx` from the live registries.
 - An agent must not publish, push tags, or change registry settings. The
   user performs every outward-facing step. The agent prepares commands and
   verifies results.
-- User steps, in order:
-  1. On jsr.io: create `@kixx/devkit` in the `@kixx` scope and link it to
-     `kixx-framework/kixx-devkit`.
-  2. From a clean checkout of the release commit, run local validation, then
-     `npm publish --access public` with their account (2FA). npm trusted
-     publishing can only be configured on an existing package. This first
-     publish has no provenance.
-  3. On npmjs.com: add a trusted publisher for the repository and
-     `release.yml`.
-  4. Push tag `v0.1.0`. The workflow skips npm (already published) and
-     publishes JSR.
-- Later releases use only step 4, after bumping versions.
+- npm trusted publishing can only be configured on a package that already
+  exists, so the first npm publish is manual and has no provenance. JSR
+  requires the package to be created and linked to the GitHub repository
+  before the first publish. The workflow then publishes JSR and skips npm.
+- Registry facts checked 2026-10-05 (npm and JSR docs): npm's trusted
+  publisher form takes the workflow file name only (`release.yml`, not the
+  path); npm recommends "Require two-factor authentication and disallow
+  tokens" once trusted publishing works; JSR authenticates `deno publish`
+  from Actions through the repository link plus `id-token: write`.
+
+**Operator runbook**
+
+Every step below is performed by the maintainer. Commands assume the
+repository root.
+
+0. Preconditions.
+   - DK-2 and DK-3 are complete and their work is merged.
+   - `distribution` is merged into `main`. README doc links point at
+     `blob/main/...`, so the docs must be on `main` before the packages
+     appear on the registries.
+   - `deno.json` and `package.json` both say `"version": "0.1.0"`.
+   - The name is still free: `npm view kixx-devkit` returns `E404`.
+   - Record the release commit: `git rev-parse origin/main`.
+
+1. Create the JSR package.
+   - Go to <https://jsr.io/new>. Scope `@kixx`, package name `devkit`.
+     Create it.
+   - Open `https://jsr.io/@kixx/devkit` → Settings. Under GitHub
+     repository, enter `kixx-framework/kixx-devkit` and click Link.
+
+2. Publish to npm by hand from a clean checkout of the release commit.
+   ```
+   git clone git@github.com:kixx-framework/kixx-devkit.git /tmp/kixx-release
+   cd /tmp/kixx-release
+   git checkout <release commit>
+   deno task check && deno task lint && deno task test && deno task test:node
+   deno publish --dry-run
+   npm pack --dry-run
+   ```
+   - `deno publish --dry-run` should show only the
+     `unsupported-javascript-entrypoint` warning (the
+     `unanalyzable-dynamic-import` warning goes away with DK-2).
+   - `npm pack --dry-run` should list `kixx.js`, `commands/**` (no
+     `commands/README.md`), `lib/**`, `deno.json`, `README.md`, `LICENSE`,
+     and `package.json`, and nothing from `test/`, `docs/`, or `agents/`.
+   - Then publish, entering the 2FA code when prompted:
+     ```
+     npm whoami || npm login
+     npm publish --access public
+     ```
+   - Check: `npm view kixx-devkit@0.1.0 version` prints `0.1.0`.
+
+3. Configure npm trusted publishing.
+   - <https://www.npmjs.com/package/kixx-devkit> → Settings → Trusted
+     Publisher → GitHub Actions:
+     - Organization or user: `kixx-framework`
+     - Repository: `kixx-devkit`
+     - Workflow filename: `release.yml`
+     - Environment: leave empty (the workflow uses none).
+   - Leave Publishing access as it is until the first tag-driven npm
+     publish works (0.1.1 or later); then select "Require two-factor
+     authentication and disallow tokens".
+
+4. Tag and push the release.
+   ```
+   git tag v0.1.0 <release commit>
+   git push origin v0.1.0
+   ```
+   - Watch the Release workflow under the repository's Actions tab. Expected
+     log lines: the version check passes, all tests pass, "Publish to JSR"
+     runs `deno publish`, and "Publish to npm" prints
+     `npm already has kixx-devkit@0.1.0; skipping.`
+   - If JSR fails on authentication, check the step 1 repository link, then
+     use "Re-run jobs". Re-running is safe: each publish step skips a
+     version its registry already has.
+   - If a code defect turns up, do not move the tag. npm `0.1.0` is
+     already permanent. Fix it on `main`, bump both manifests to `0.1.1`,
+     and release that.
+
+5. Hand verification to an agent (or run it yourself): the acceptance
+   criteria below, installing into scratch directories rather than the
+   global prefix.
+
+Later releases use only the "Releasing" steps in `README.md`: bump both
+versions, validate, commit, then tag `v<version>` and push the tag. The first
+of those releases is the first npm publish with provenance. If it fails with
+a repository mismatch, check that `package.json` `repository.url` matches
+`https://github.com/kixx-framework/kixx-devkit`.
 
 **Expected touch points**
 
@@ -947,13 +1023,14 @@ install a working `kixx` from the live registries.
 **Progress and handoff**
 
 - Completed: Nothing yet.
-- Current state: Blocked. RD-1 through RD-7 are complete; nothing is
-  committed yet (all work is in the working tree on branch `distribution`).
+- Current state: Blocked. RD-1 through RD-7 are complete and committed on
+  branch `distribution` (not yet merged to `main` or pushed). The operator
+  runbook above is written.
 - Remaining: Everything described above.
 - Decisions and discoveries: None yet.
 - Actual files changed: None yet.
 - Validation run: None yet.
 - Blockers: DK-2 and DK-3 in `deno-single-executable.md` are Not started
-  (checked 2026-10-05). After they land, the user's registry steps above.
+  (checked 2026-10-05). After they land, the operator runbook above.
   Re-run `deno publish --dry-run`: the `unanalyzable-dynamic-import`
   warning from `lib/cloudflare-config-loader.js` should be gone after DK-2.

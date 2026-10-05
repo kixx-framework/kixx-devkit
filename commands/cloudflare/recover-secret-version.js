@@ -3,11 +3,10 @@ import CloudflareApiClient from '../../lib/cloudflare/cloudflare-api-client.js';
 import { recoverSecretVersion } from '../../lib/cloudflare/manage-worker-secrets.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 export default class CloudflareRecoverSecretVersionCommand {
 
-    static description = subcommands['recover-secret-version'].description;
+    static description = 'Verify an explicit secret-only Worker version and recover its local state';
     static options = {
         environment: { type: 'string', short: 'e', description: 'Required environment to recover' },
     };

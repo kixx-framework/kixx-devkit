@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual, assertFalsy } from 'kixx-assert';
+import { assert, assertEqual, assertFalsy } from '../../../../lib/vendor/kixx-assert/mod.js';
 import {
     RESERVED_PAGE_FILENAMES,
     isValidPathname,

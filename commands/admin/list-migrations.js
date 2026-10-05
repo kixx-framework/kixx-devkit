@@ -3,11 +3,12 @@ import process from 'node:process';
 import resolveAdminEnvironment from '../../lib/admin/resolve-admin-environment.js';
 import { promptForValue } from '../../lib/prompt.js';
 import { wrapText } from '../../lib/text-wrap.js';
-import { subcommands } from './index.js';
 
 export default class AdminListMigrationsCommand {
 
-    static description = subcommands['list-migrations'].description;
+    static description = `
+        List every registered migration with its durable status
+    `;
 
     static options = {
         environment: { type: 'string', short: 'e', description: 'Required application environment' },

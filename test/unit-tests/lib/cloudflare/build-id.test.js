@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assertEqual } from 'kixx-assert';
+import { assertEqual } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { formatBuildId } from '../../../../lib/cloudflare/build-id.js';
 
 

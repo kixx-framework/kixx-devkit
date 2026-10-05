@@ -4,7 +4,7 @@ import {
     assertEqual,
     assertMatches,
     assertUndefined,
-} from 'kixx-assert';
+} from '../../../../lib/vendor/kixx-assert/mod.js';
 import CloudflareWorkerVersion from '../../../../lib/cloudflare/cloudflare-worker-version.js';
 
 

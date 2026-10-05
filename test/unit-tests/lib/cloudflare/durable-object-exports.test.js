@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual, assertMatches, assertUndefined } from 'kixx-assert';
+import { assert, assertEqual, assertMatches, assertUndefined } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { buildDurableObjectExports } from '../../../../lib/cloudflare/durable-object-exports.js';
 
 

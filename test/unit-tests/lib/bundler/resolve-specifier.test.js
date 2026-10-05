@@ -1,5 +1,5 @@
 import { describe, MockTracker } from 'kixx-test';
-import { assertEqual, assertMatches } from 'kixx-assert';
+import { assertEqual, assertMatches } from '../../../../lib/vendor/kixx-assert/mod.js';
 import resolveSpecifier from '../../../../lib/bundler/resolve-specifier.js';
 
 const BASE_DIRECTORY = '/app';

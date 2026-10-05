@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual } from 'kixx-assert';
+import { assert, assertEqual } from '../../../../lib/vendor/kixx-assert/mod.js';
 import CloudflareSetSecretCommand from '../../../../commands/cloudflare/set-secret.js';
 
 const STATE_FILEPATH = '/app/.kixx/cloudflare-state.production.json';
@@ -34,7 +34,7 @@ describe('CloudflareSetSecretCommand', ({ it }) => {
         assertEqual(0, exitCode);
         assertEqual(1, calls.length);
         assertEqual('FAKE_SECRET_VALUE', calls[0].secrets.API_KEY);
-        assertEqual('kixx.js cloudflare set-secret', calls[0].command);
+        assertEqual('kixx cloudflare set-secret', calls[0].command);
         assertEqual(apiClient, calls[0].apiClient);
         assert(output.text.includes('API_KEY'), 'expected changed name');
         assert(output.text.includes('new-version-id (undeployed)'), 'expected undeployed version');

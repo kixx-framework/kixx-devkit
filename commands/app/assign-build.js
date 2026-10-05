@@ -1,15 +1,14 @@
 import process from 'node:process';
-import { isNonEmptyString } from 'kixx-assert';
+import { isNonEmptyString } from '../../lib/vendor/kixx-assert/mod.js';
 
 import assignRelease from '../../lib/publishing/assign-release.js';
 import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishing-environment.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 export default class AppAssignBuildCommand {
 
-    static description = subcommands['assign-build'].description;
+    static description = 'Assign an existing Release to a build under a pointer precondition';
     static options = {
         environment: { type: 'string', short: 'e', description: 'Required application environment' },
         'build-id': { type: 'string', description: 'Required build pointer id' },

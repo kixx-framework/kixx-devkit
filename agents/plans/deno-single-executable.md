@@ -1,40 +1,40 @@
-# Implementation Plan: Deno Single Executable and JSONC Cloudflare Config
+# Implementation Plan: JSONC Cloudflare Config and Deno Single Executable
 
-> **Status: Exploratory — DO NOT IMPLEMENT.**
+> **Status:** DK-2 and DK-3 are ready to implement once RD-2 in
+> `remote-cli-distribution.md` lands. They are prerequisites of RD-8 (first
+> public release). DK-4 is a future phase. Do not start it until
+> `remote-cli-distribution.md` is complete.
 >
-> This plan records research and decisions only. Do not start any task below.
-> Priority moved to preparing the devkit for distribution as remote CLI tools
-> for Deno (`deno install` from JSR) and Node.js (npm) first. That work likely
-> requires a static command registry, which invalidates DK-4's assumption that
-> the filesystem registry is kept. Revisit and revise this plan after the
-> remote CLI work lands.
+> Revised after the remote CLI distribution planning. The former DK-1 (Deno
+> toolchain) was absorbed by RD-2. The filesystem command registry DK-4
+> assumed is replaced by RD-3.
 
 ## Implementation Approach
 
-Ship the devkit as one self-contained `kixx` executable built with
-`deno compile`, and move the project's own toolchain (tests, lint, type check)
-from Node.js/npm to Deno. Replace the executable `cloudflare-config.js` with a
-data file, `cloudflare-config.jsonc`, parsed by `jsonc-parser`.
+Replace the executable `cloudflare-config.js` with a data file,
+`cloudflare-config.jsonc`, parsed by `jsonc-parser`. Later, ship the devkit
+as one self-contained `kixx` executable built with `deno compile`.
 
 Why Deno instead of a Go rewrite: the CSS parser, bundler, content
 addressing, and API clients are already tested JavaScript whose output must
-match the server byte for byte, and Deno runs this codebase almost unchanged. Probes done while
-planning (Deno 2.8.1, macOS arm64):
+match the server byte for byte, and Deno runs this codebase almost unchanged.
+Probes done while planning (Deno 2.8.1, macOS arm64):
 
 - `deno run -A run-tests.js` — all 622 tests pass, same as Node.
 - `deno run -A run-linter.js` — clean, same as Node.
-- `deno compile --no-check -A --include commands kixx.js` — 73 MB binary; the
-  filesystem command registry (`import.meta.url` + dynamic `import()`) works
-  from embedded files; help, `admin gen-secure-token`, and a `cloudflare`
-  command run from inside `tmp/sample-app`.
-- Without `--no-check`, compile fails only on `TS2307: Cannot find module
-  'kixx-assert'` (3 sites) — an import-map problem, not a code problem.
+- `deno compile --no-check -A --include commands kixx.js` — 73 MB binary.
+  Help, `admin gen-secure-token`, and a `cloudflare` command ran from inside
+  `tmp/sample-app`. That probe used the old filesystem registry; RD-3's static
+  registry needs no `--include`.
+- Without `--no-check`, compile failed only on `TS2307: Cannot find module
+  'kixx-assert'` (3 sites). RD-1 vendors `kixx-assert`, which removes this.
 
 Why JSONC instead of JS config: the CLI will later write provisioned resource
 IDs back into the config file. Writing safely into executable JS requires AST
 editing and fails when values are computed. JSONC keeps comments for authors
 and supports minimal-edit writes (`jsonc-parser` `modify` + `applyEdits`).
-Writing is deferred; this plan only parses.
+Writing is deferred; this plan only parses. Converting before the first
+public release means no published user ever migrates config formats.
 
 The Worker still needs the config as a JS module. The packager generates a
 virtual `cloudflare-config.js` module (`export default {...};`) from the
@@ -43,121 +43,40 @@ parsed JSONC, so the application's `cloudflare-server.js` keeps
 
 Cross-cutting decisions:
 
-- **Dependencies.** `jsonc-parser` is approved by the user (pin
-  `npm:jsonc-parser@3.3.1`). The existing `kixx-assert`, `kixx-test`, and
-  `kixx-linting` move from `package.json` to `deno.json` `imports` as exact
-  `npm:` pins at their current versions. Add nothing else without asking.
+- **Toolchain and conventions.** As set in `remote-cli-distribution.md`: Deno
+  tasks (`deno task check|lint|test|test:node|kixx`), plain JS with `node:`
+  built-ins, no `Deno.*` APIs, the CLI named `kixx`, no runtime package
+  dependencies.
+- **Dependencies.** The user approved `jsonc-parser@3.3.1`, vendored into
+  `lib/vendor/jsonc-parser/` like `kixx-assert`. No registry pin, so both
+  packages stay free of runtime dependencies. Add nothing else without
+  asking.
 - **CLI compatibility.** Command names, flags, positionals, exit codes, and
-  output wording stay the same, except that the program name changes from
-  `kixx.js` to `kixx`. Config locations (`~/.kixx`, `<project>/.kixx`, `.env`
-  files, `example.env.secrets`, state files) are unchanged.
+  output wording stay the same. Config locations (`~/.kixx`,
+  `<project>/.kixx`, `.env` files, `example.env.secrets`, state files) are
+  unchanged.
 - **State hashes.** Byte-identical `modulesHash` across the switch is not
   required. The generated config module changes module content, so each
   environment uploads one new version on its first post-migration build.
   `configHash` and `bindingsHash` are unaffected. Document this.
 - **Out of scope:** Node.js app deployments and `node-config.js` (the app
   template's `node-server.js` lives in another repo); writing to JSONC; Linux
-  and Windows binaries (this version is macOS only); CI and
-  release automation; macOS notarization; a `--version` flag; publishing to
-  npm or JSR.
+  and Windows binaries (DK-4 is macOS only); CI and release automation for
+  binaries; macOS notarization.
 
 Tasks and dependencies:
 
 ```
-DK-1 Deno toolchain ──┬── DK-2 JSONC config loader ── DK-3 Generated Worker config module
-                      └── DK-4 Compiled `kixx` binary
+RD-2 (remote-cli-distribution.md) ── DK-2 JSONC config loader ── DK-3 Generated Worker config module ── RD-8
+RD-6 (remote-cli-distribution.md) ── DK-4 Compiled `kixx` binary (future phase)
 ```
-
-DK-4 doc updates mention `cloudflare-config.jsonc`; if DK-4 lands before
-DK-2/DK-3, the later task updates those references.
-
----
-
-### Task DK-1: Run the project toolchain on Deno
-
-**Status:** Not started
-**Depends on:** None
-**Documentation:** `README.md`; `AGENTS.md`; `test/README.md`;
-`agents/docs/code-style-guide.md`
-
-**Objective**
-
-Developers lint, test, type-check, and run the CLI with Deno only. Node.js and
-npm are no longer required to work on the project. Behavior of every command
-is unchanged.
-
-**Scope**
-
-- In: `deno.json` (import map, tasks, lockfile), removal of npm metadata,
-  making `deno check` pass, developer documentation.
-- Out: JSONC (DK-2, DK-3), `deno compile` targets and the `kixx` program name
-  (DK-4), rewriting tests to `Deno.test` (keep `kixx-test`).
-
-**Design and invariants**
-
-- `deno.json` `imports` maps bare specifiers to exact pins:
-  `kixx-assert` → `npm:kixx-assert@2.1.1`, `kixx-test` → `npm:kixx-test@3.0.0`,
-  `kixx-linting` → `npm:kixx-linting@1.1.2`. Source import statements stay
-  bare; do not rewrite them to `npm:` specifiers.
-- `kixx-assert` is a runtime dependency today despite being listed under
-  `devDependencies`; the import map makes that irrelevant.
-- Commit `deno.lock`. The repo previously ignored `package-lock.json` because
-  it had no runtime dependencies; it now does.
-- Tasks: `deno task lint`, `deno task test` (forwarding paths and `--skip`
-  to `run-tests.js`), `deno task check`, and `deno task kixx` for running the
-  CLI from source. Each task declares the permissions it needs. Tests write
-  temp directories, so `test` needs `--allow-write`.
-- Keep `node:` imports in source. Deno supports them; replacing them with
-  `Deno.*` APIs is churn without benefit.
-- Delete `package.json`. Remove `"engines"` intent by documenting the minimum
-  Deno version (2.8 — the version verified) in `README.md`.
-- `deno check` must pass with no `--no-check` escape hatch.
-
-**Expected touch points**
-
-- `deno.json`, `deno.lock` — new.
-- `package.json` — delete.
-- `.gitignore` — drop npm entries that no longer apply; keep `tmp/`.
-- `run-tests.js`, `run-linter.js` — only if Deno requires changes.
-- `README.md`, `AGENTS.md`, `test/README.md`, `commands/README.md`,
-  `agents/docs/code-style-guide.md` — replace `node`/`npm` commands with
-  `deno task` equivalents; describe Deno as the runtime.
-
-**Acceptance criteria**
-
-- [ ] With no `node_modules/` directory, `deno task test` runs all tests and
-      passes.
-- [ ] `deno task lint` is clean.
-- [ ] `deno task check` passes for `kixx.js` and everything it imports.
-- [ ] `deno task test test/unit-tests/lib` and `--skip <path>` work as
-      `node run-tests.js` did.
-- [ ] `deno task kixx` with no arguments prints the command list and exits 1;
-      `deno task kixx admin gen-secure-token` exits 0.
-- [ ] No developer documentation tells the reader to run `node` or `npm`.
-
-**Validation**
-
-- `rm -rf node_modules && deno task check && deno task lint && deno task test`
-- `deno task kixx; echo $?` — expect help and `1`.
-- `grep -rn "npm \|node run-\|node kixx" README.md AGENTS.md test commands docs agents/docs`
-  — expect no hits.
-
-**Progress and handoff**
-
-- Completed: Nothing yet.
-- Current state: Not started.
-- Remaining: Everything described above.
-- Decisions and discoveries: None yet.
-- Actual files changed: None yet.
-- Validation run: None yet.
-- Blockers: None.
 
 ---
 
 ### Task DK-2: Load `cloudflare-config.jsonc` instead of `cloudflare-config.js`
 
 **Status:** Not started
-**Depends on:** DK-1
+**Depends on:** RD-2 (`remote-cli-distribution.md`)
 **Documentation:** `docs/cloudflare.md`; `docs/configuration.md`;
 `commands/README.md`
 
@@ -170,13 +89,29 @@ devkit no longer executes project code to read configuration.
 
 **Scope**
 
-- In: the loader, its error reporting, the legacy-file guard, help labels,
-  docs, tests, and converting `tmp/sample-app` locally for manual checks.
+- In: vendoring `jsonc-parser`, the loader, its error reporting, the
+  legacy-file guard, help labels, docs, tests, and converting
+  `tmp/sample-app` locally for manual checks.
 - Out: providing the config to the Worker (DK-3); writing to the file
   (future); `node-config.js`.
 
 **Design and invariants**
 
+- Vendor `jsonc-parser@3.3.1` into `lib/vendor/jsonc-parser/`, following
+  RD-1's layout for `kixx-assert`:
+  - Copy the ESM build (`lib/esm/main.js` and `lib/esm/impl/*.js`, keeping
+    the `impl/` subdirectory) and `LICENSE.md`. Skip the UMD build and
+    `main.d.ts`.
+  - The upstream ESM build uses extensionless relative imports
+    (`from './impl/format'`), which Node and Deno both reject. Append `.js`
+    to each relative import (9 lines across `main.js`, `impl/edit.js`,
+    `impl/format.js`, `impl/parser.js`). This is the only modification.
+    Verified during planning: `parse`, `modify`, and `applyEdits` then work
+    on Node 24 and Deno 2.8.
+  - `lib/vendor/jsonc-parser/README.md` records the upstream version, URL,
+    and the import-extension patch, so a future upgrade reapplies it.
+  - Get the files from the npm tarball (`npm pack jsonc-parser@3.3.1` into
+    the agent scratchpad). Do not add it to any manifest.
 - Parse with `jsonc-parser` `parseTree` (or `parse` with an error array)
   allowing comments and trailing commas. Any parse error is a `UsageError`
   naming the file, line, column, and the parser's error code. Never return a
@@ -197,6 +132,7 @@ devkit no longer executes project code to read configuration.
 
 **Expected touch points**
 
+- `lib/vendor/jsonc-parser/**` — new, vendored.
 - `lib/cloudflare-config-loader.js` — JSONC parsing, legacy guard.
 - `kixx.js` — help heading.
 - `test/unit-tests/lib/cloudflare-config-loader.test.js` — rewrite for JSONC.
@@ -326,43 +262,38 @@ exists on disk.
 
 ### Task DK-4: Build the `kixx` executable for macOS
 
-**Status:** Not started
-**Depends on:** DK-1
+**Status:** Not started (future phase)
+**Depends on:** RD-6 and all of `remote-cli-distribution.md`; DK-2
 **Documentation:** `README.md`; `commands/README.md`; `docs/*.md`
 
 **Objective**
 
 `deno task compile` produces self-contained `kixx` executables for
-darwin-arm64 and darwin-x64, and the CLI calls itself `kixx` everywhere. A user needs neither Node.js nor Deno
-installed.
+darwin-arm64 and darwin-x64. A user needs neither Node.js nor Deno installed.
 
 **Scope**
 
-- In: macOS-only compile tasks, embedded command modules, permissions, program-name
-  change, `dist/` output, install/build documentation.
+- In: macOS-only compile tasks, baked-in permissions, `dist/` output,
+  binary install and build documentation.
 - Out: Linux and Windows builds, CI, GitHub Release automation,
-  signing/notarization, `--version`.
+  signing/notarization. The program name and `--version` are already done
+  (RD-4).
 
 **Design and invariants**
 
 - Targets and outputs (in gitignored `dist/`):
   - `aarch64-apple-darwin` → `dist/kixx-darwin-arm64`
   - `x86_64-apple-darwin` → `dist/kixx-darwin-x64`
-- Keep the filesystem command registry; embed it with `--include commands`.
-  Verified working in a compiled binary during planning. The commands
-  directory contract in `commands/README.md` is unchanged.
+- The static command registry (RD-3) puts every command in the module graph.
+  Do not pass `--include commands`.
 - Compile with type checking on (no `--no-check`).
-- Permissions are baked in at compile time. Start from least privilege:
-  `--allow-read`, `--allow-write`, `--allow-net` (origins are user-configured,
-  so net is unscoped), `--allow-env`, plus whatever `node:os`/TTY APIs need
-  (e.g. `--allow-sys=homedir`). Determine the minimal set by exercising every
-  command family; record the final set and why in handoff notes. Fall back to
-  `-A` only with a recorded reason.
-- Program name: usage lines print `kixx`, not `kixx.js`. Errors and recovery
-  hints that print runnable commands (e.g. the `app assign-build` recovery
-  command, `deploy-version` hints) must print `kixx ...`. Find them with
-  `grep -rn "kixx.js" lib commands kixx.js`.
-- `kixx.js` remains the source entry point for `deno task kixx`.
+- Permissions are baked in at compile time. Use the set RD-6 verified for
+  `deno install`: `-RWNE --allow-sys=homedir`. A difference between binary
+  and installed-script permissions needs the user's agreement.
+- After DK-2, the CLI reads `cloudflare-config.jsonc` as data, so the binary
+  never imports project code.
+- `kixx --version` in the binary prints the `deno.json` version (JSON import,
+  embedded at compile time).
 - Interactive prompts (`lib/prompt.js` masked input via raw mode) must work
   in the compiled binary on macOS.
 
@@ -371,24 +302,19 @@ installed.
 - `deno.json` — `compile` task building both macOS targets, and a
   `compile:local` task for the host platform.
 - `.gitignore` — `dist/`.
-- `kixx.js` — usage program name.
-- `lib/**`, `commands/**` — printed command hints.
-- Tests asserting output containing `kixx.js`.
-- `README.md` — build and install instructions (copy binary onto `PATH`;
-  macOS quarantine note for downloaded binaries), command list.
-- `docs/*.md`, `commands/README.md` — `kixx.js` → `kixx` in examples.
+- `README.md` — build and binary install instructions (copy the binary onto
+  `PATH`; macOS quarantine note for downloaded binaries).
 
 **Acceptance criteria**
 
 - [ ] `deno task compile` writes both macOS binaries without `--no-check`.
 - [ ] On the host binary: no-arg help exits 1; `--help` at every level exits
-      0; `admin gen-secure-token` prints a token; a `cloudflare` command run
-      in a project directory loads `.kixx` and `cloudflare-config.jsonc`.
+      0; `--version` prints the version; `admin gen-secure-token` prints a
+      token; a `cloudflare` command run in a project directory loads `.kixx`
+      and `cloudflare-config.jsonc`.
 - [ ] Masked prompt works in the compiled binary
       (`admin accept-invite` against a non-routable origin, aborting after the
       prompts).
-- [ ] Output and docs say `kixx`, not `kixx.js`, except where referring to
-      the source entry file.
 - [ ] The darwin-x64 binary runs `--help` (natively on Intel, or under
       Rosetta 2 via `arch -x86_64`).
 
@@ -396,13 +322,11 @@ installed.
 
 - `deno task compile && ls -lh dist/`
 - `./dist/kixx-darwin-arm64; echo $?` — help, `1`.
-- `./dist/kixx-darwin-arm64 cloudflare deploy-version --help`
+- `./dist/kixx-darwin-arm64 --version`
 - From `tmp/sample-app`: `../../dist/kixx-darwin-arm64 cloudflare
   deploy-version -e production` — expect the Publishing API configuration
   usage error (proves config loading, no network write).
 - `arch -x86_64 ./dist/kixx-darwin-x64 --help` — requires Rosetta 2.
-- `grep -rn "kixx\.js" lib commands docs README.md` — only source-entry
-  references remain.
 
 **Progress and handoff**
 
@@ -410,7 +334,7 @@ installed.
 - Current state: Not started.
 - Remaining: Everything described above.
 - Decisions and discoveries: Planning probe showed a 73 MB darwin-arm64
-  binary and a working embedded command registry.
+  binary.
 - Actual files changed: None yet.
 - Validation run: None yet.
 - Blockers: None.

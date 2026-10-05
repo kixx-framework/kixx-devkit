@@ -5,14 +5,16 @@ import { InvalidInviteError } from '../../lib/admin/admin-api-error.js';
 import { promptForValue, promptForValueTwice } from '../../lib/prompt.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 const MIN_PASSWORD_LENGTH = 16;
 const MAX_PASSWORD_LENGTH = 256;
 
 export default class AdminAcceptInviteCommand {
 
-    static description = subcommands['accept-invite'].description;
+    static description = `
+        Redeem a one-time admin invite or bootstrap token and create the
+        admin account it grants
+    `;
 
     static options = {
         environment: { type: 'string', short: 'e', description: 'Required application environment' },

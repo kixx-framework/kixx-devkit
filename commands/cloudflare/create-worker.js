@@ -1,13 +1,12 @@
 import process from 'node:process';
-import { isPlainObject } from 'kixx-assert';
+import { isPlainObject } from '../../lib/vendor/kixx-assert/mod.js';
 import CloudflareApiClient from '../../lib/cloudflare/cloudflare-api-client.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 
 export default class CloudflareCreateWorkerCommand {
 
-    static description = subcommands['create-worker'].description;
+    static description = 'Create a new Worker from scratch';
 
     static options = {
         environment: {

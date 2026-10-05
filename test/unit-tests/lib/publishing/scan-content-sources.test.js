@@ -6,7 +6,7 @@ import {
     assert,
     assertEqual,
     assertMatches,
-} from 'kixx-assert';
+} from '../../../../lib/vendor/kixx-assert/mod.js';
 
 import scanContentSources from '../../../../lib/publishing/scan-content-sources.js';
 import { assertPublishableContentSources } from '../../../../lib/publishing/content-source-report.js';

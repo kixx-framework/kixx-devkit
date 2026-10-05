@@ -1,11 +1,11 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual } from 'kixx-assert';
+import { assert, assertEqual } from '../../../../lib/vendor/kixx-assert/mod.js';
 import CloudflareBootstrapCommand from '../../../../commands/cloudflare/bootstrap.js';
 import { subcommands } from '../../../../commands/cloudflare/index.js';
 
 describe('CloudflareBootstrapCommand', ({ it }) => {
     it('is registered with the expected CLI contract', () => {
-        assertEqual(subcommands.bootstrap.description, CloudflareBootstrapCommand.description);
+        assertEqual(CloudflareBootstrapCommand, subcommands.bootstrap);
         assertEqual('string', CloudflareBootstrapCommand.options.environment.type);
         assertEqual('e', CloudflareBootstrapCommand.options.environment.short);
         assertEqual('dotenv-file', CloudflareBootstrapCommand.positionals[0].name);
@@ -34,9 +34,9 @@ describe('CloudflareBootstrapCommand', ({ it }) => {
         assert(output.text.includes('BUILD_ID: bootstrap-build-id'), output.text);
         assert(output.text.includes('Wrote .kixx/cloudflare-state.production.json'), output.text);
         assert(output.text.includes('ContentAddressableIndexStore'), output.text);
-        assert(output.text.includes('kixx.js admin accept-invite -e production'), output.text);
-        assert(output.text.includes('kixx.js admin create-publishing-token -e production'), output.text);
-        assert(output.text.includes('kixx.js cloudflare release -e production'), output.text);
+        assert(output.text.includes('kixx admin accept-invite -e production'), output.text);
+        assert(output.text.includes('kixx admin create-publishing-token -e production'), output.text);
+        assert(output.text.includes('kixx cloudflare release -e production'), output.text);
         assert(!output.text.includes('secret-sentinel'), 'expected no secret value in output');
     });
 

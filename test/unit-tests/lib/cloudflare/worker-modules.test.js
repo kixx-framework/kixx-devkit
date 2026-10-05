@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual, assertNotEqual } from 'kixx-assert';
+import { assert, assertEqual, assertNotEqual } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { toWorkerModules, hashWorkerModules } from '../../../../lib/cloudflare/worker-modules.js';
 
 

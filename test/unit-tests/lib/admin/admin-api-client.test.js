@@ -7,7 +7,7 @@ import {
     assertMatches,
     assertNotMatches,
     assertUndefined,
-} from 'kixx-assert';
+} from '../../../../lib/vendor/kixx-assert/mod.js';
 
 import AdminAPIClient from '../../../../lib/admin/admin-api-client.js';
 

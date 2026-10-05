@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual } from 'kixx-assert';
+import { assert, assertEqual } from '../../../../lib/vendor/kixx-assert/mod.js';
 import {
     getStateFilepath,
     readWorkerVersionState,

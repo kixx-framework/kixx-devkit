@@ -1,34 +1,26 @@
+import CloudflareBootstrapCommand from './bootstrap.js';
+import CloudflareRecoverSecretVersionCommand from './recover-secret-version.js';
+import CloudflareCreateWorkerCommand from './create-worker.js';
+import CloudflareUpdateWorkerCommand from './update-worker.js';
+import CloudflareCreateWorkerVersionCommand from './create-worker-version.js';
+import CloudflareDeployVersionCommand from './deploy-version.js';
+import CloudflareSetSecretCommand from './set-secret.js';
+import CloudflareDeleteSecretCommand from './delete-secret.js';
+import CloudflareSetSecretsCommand from './set-secrets.js';
+import CloudflareReleaseCommand from './release.js';
+
+
 export const description = 'Tools for working directly with Cloudflare';
 
 export const subcommands = {
-    bootstrap: {
-        description: 'Create the Worker when missing and deploy its first version with initial secrets',
-    },
-    'recover-secret-version': {
-        description: 'Verify an explicit secret-only Worker version and recover its local state',
-    },
-    'create-worker': {
-        description: 'Create a new Worker from scratch',
-    },
-    'update-worker': {
-        description: 'Replace an existing Worker\'s Worker-level configuration',
-    },
-    'create-worker-version': {
-        description: 'Bundle, hash, and idempotently upload a Cloudflare Worker version',
-    },
-    'deploy-version': {
-        description: 'Route all traffic to an existing Cloudflare Worker version',
-    },
-    'set-secret': {
-        description: 'Create an undeployed Worker version with one added or replaced secret',
-    },
-    'delete-secret': {
-        description: 'Create an undeployed Worker version with one removed secret',
-    },
-    'set-secrets': {
-        description: 'Create an undeployed Worker version with additive secrets from a dotenv file',
-    },
-    release: {
-        description: 'Create, publish, and deploy a Worker release in safe order',
-    },
+    bootstrap: CloudflareBootstrapCommand,
+    'recover-secret-version': CloudflareRecoverSecretVersionCommand,
+    'create-worker': CloudflareCreateWorkerCommand,
+    'update-worker': CloudflareUpdateWorkerCommand,
+    'create-worker-version': CloudflareCreateWorkerVersionCommand,
+    'deploy-version': CloudflareDeployVersionCommand,
+    'set-secret': CloudflareSetSecretCommand,
+    'delete-secret': CloudflareDeleteSecretCommand,
+    'set-secrets': CloudflareSetSecretsCommand,
+    release: CloudflareReleaseCommand,
 };

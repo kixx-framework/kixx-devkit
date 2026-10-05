@@ -6,7 +6,7 @@ export default [
             'lib/vendor/',
         ],
         languageOptions: {
-            ecmaVersion: 2022,
+            ecmaVersion: 2025,
             sourceType: 'module',
             globals: {
                 Blob: 'readonly',

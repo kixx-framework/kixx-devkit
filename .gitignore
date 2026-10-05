@@ -24,7 +24,7 @@ node_modules/
 # Output of 'npm pack'
 *.tgz
 
-# There are no dependencies, so we ignore package-lock
+# Dev dependencies are pinned in deno.json and deno.lock
 package-lock.json
 
 # Claude worktrees

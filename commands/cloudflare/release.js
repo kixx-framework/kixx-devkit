@@ -16,11 +16,10 @@ import {
     renderUndeclaredSecrets,
 } from './create-worker-version.js';
 import { renderDeploymentResult } from './deploy-version.js';
-import { subcommands } from './index.js';
 
 export default class CloudflareReleaseCommand {
 
-    static description = subcommands.release.description;
+    static description = 'Create, publish, and deploy a Worker release in safe order';
     static options = {
         environment: { type: 'string', short: 'e', description: 'Required environment to release' },
         force: { type: 'boolean', description: 'Create a version even when code inputs are unchanged' },

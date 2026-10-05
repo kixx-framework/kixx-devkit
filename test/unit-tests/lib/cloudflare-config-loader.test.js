@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe } from 'kixx-test';
-import { assert, assertEqual, assertMatches } from 'kixx-assert';
+import { assert, assertEqual, assertMatches } from '../../../lib/vendor/kixx-assert/mod.js';
 import { loadCloudflareConfig } from '../../../lib/cloudflare-config-loader.js';
 
 

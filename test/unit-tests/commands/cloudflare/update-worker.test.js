@@ -3,7 +3,7 @@ import {
     assert,
     assertEqual,
     assertMatches,
-} from 'kixx-assert';
+} from '../../../../lib/vendor/kixx-assert/mod.js';
 import CloudflareUpdateWorkerCommand from '../../../../commands/cloudflare/update-worker.js';
 import captureOutput from '../../helpers/capture-output.js';
 

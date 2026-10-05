@@ -1,5 +1,5 @@
 import process from 'node:process';
-import { isUndefined } from 'kixx-assert';
+import { isUndefined } from '../../lib/vendor/kixx-assert/mod.js';
 
 import resolveAdminEnvironment from '../../lib/admin/resolve-admin-environment.js';
 import {
@@ -10,11 +10,12 @@ import {
 import { promptForValue, promptForConfirmation } from '../../lib/prompt.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import UsageError from '../../lib/usage-error.js';
-import { subcommands } from './index.js';
 
 export default class AdminRunMigrationCommand {
 
-    static description = subcommands['run-migration'].description;
+    static description = `
+        Run one bounded batch of a migration, in dry-run or real mode
+    `;
 
     static positionals = [
         { name: 'id', description: 'Permanent migration id from list-migrations', required: true },
@@ -138,8 +139,8 @@ function renderResult(migrationId, environment, result) {
 
     if (!done) {
         const next = dryRun
-            ? `kixx.js admin run-migration -e ${ environment } ${ migrationId } --dry-run --cursor ${ cursor }`
-            : `kixx.js admin run-migration -e ${ environment } ${ migrationId }`;
+            ? `kixx admin run-migration -e ${ environment } ${ migrationId } --dry-run --cursor ${ cursor }`
+            : `kixx admin run-migration -e ${ environment } ${ migrationId }`;
         lines.push('', `Next: ${ next }`);
     }
 

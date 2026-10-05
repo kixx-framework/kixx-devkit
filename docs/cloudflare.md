@@ -1,4 +1,4 @@
-# `kixx.js cloudflare` — Worker Deployment
+# `kixx cloudflare` — Worker Deployment
 
 Commands for creating a Cloudflare Worker, packaging and uploading versions,
 deploying traffic, and shipping code and content together. See
@@ -11,7 +11,7 @@ Creates the Worker named by one Cloudflare environment configuration. It does
 not package, upload, or deploy a Worker version.
 
 ```sh
-kixx.js cloudflare create-worker --environment production
+kixx cloudflare create-worker --environment production
 ```
 
 `--environment` (`-e`) is required and selects
@@ -29,7 +29,7 @@ environment's `WORKER` block. It does not create a version, deploy, or touch
 local state.
 
 ```sh
-kixx.js cloudflare update-worker --environment production
+kixx cloudflare update-worker --environment production
 ```
 
 `--environment` (`-e`) is required and selects
@@ -47,7 +47,7 @@ Creates the Worker when it does not exist, then deploys its first version with
 initial secret bindings:
 
 ```sh
-kixx.js cloudflare bootstrap --environment production [dotenv-file]
+kixx cloudflare bootstrap --environment production [dotenv-file]
 ```
 
 The optional dotenv path defaults to `.env.production.secrets`. Its names must
@@ -77,10 +77,10 @@ has no versions yet, so the rerun proceeds.
 Run the initial deployment in this order:
 
 ```sh
-kixx.js cloudflare bootstrap -e production
-kixx.js admin accept-invite -e production
-kixx.js admin create-publishing-token -e production
-kixx.js cloudflare release -e production
+kixx cloudflare bootstrap -e production
+kixx admin accept-invite -e production
+kixx admin create-publishing-token -e production
+kixx cloudflare release -e production
 ```
 
 Before bootstrap, put every declared Worker secret, including the generated
@@ -102,7 +102,7 @@ It does not create the Worker itself. For a new environment, use `bootstrap`;
 otherwise use `create-worker` when the configured Worker does not exist.
 
 ```sh
-kixx.js cloudflare create-worker-version --environment production
+kixx cloudflare create-worker-version --environment production
 ```
 
 Options:
@@ -493,14 +493,14 @@ or `release` will not inherit them.
 ### `set-secret`
 
 ```sh
-kixx.js cloudflare set-secret -e production API_KEY
+kixx cloudflare set-secret -e production API_KEY
 ```
 
 An interactive terminal prompts with input masking. For CI, provide the value
 on standard input, never as an argument:
 
 ```sh
-printenv API_KEY | kixx.js cloudflare set-secret -e production API_KEY
+printenv API_KEY | kixx cloudflare set-secret -e production API_KEY
 ```
 
 Non-terminal input is read through EOF. One final LF or CRLF is removed; all
@@ -509,7 +509,7 @@ other whitespace is part of the value.
 ### `set-secrets`
 
 ```sh
-kixx.js cloudflare set-secrets -e production [dotenv-file]
+kixx cloudflare set-secrets -e production [dotenv-file]
 ```
 
 The optional path defaults to `.env.production.secrets` for the selected
@@ -523,7 +523,7 @@ Deletion requires reviewed declaration removal:
 
 1. Stop code from requiring the secret and deploy that change if necessary.
 2. Remove or comment out its assignment in `example.env.secrets` and commit it.
-3. Run `kixx.js cloudflare delete-secret -e production OLD_SECRET`.
+3. Run `kixx cloudflare delete-secret -e production OLD_SECRET`.
 4. Promote the returned version, or build a later version from it.
 
 The command refuses to delete a name that is still actively declared or that
@@ -555,8 +555,8 @@ failed before recording the created version. It requires the complete prior
 state record and an explicit version ID:
 
 ```sh
-kixx.js cloudflare recover-secret-version -e production <version-id>
-kixx.js cloudflare release -e production
+kixx cloudflare recover-secret-version -e production <version-id>
+kixx cloudflare release -e production
 ```
 
 The supplied version must be Cloudflare's latest created version. Recovery
@@ -586,7 +586,7 @@ promoting an uploaded version and rolling back to an older version without
 creating new code.
 
 ```sh
-node kixx.js cloudflare deploy-version -e <environment> [version-id]
+kixx cloudflare deploy-version -e <environment> [version-id]
 ```
 
 When `version-id` is omitted, the command uses `versionId` from
@@ -630,7 +630,7 @@ If version lookup or deployment fails, Cloudflare state is not changed.
 Ships Worker code and content through one pre-staged release workflow.
 
 ```sh
-kixx.js cloudflare release --environment <name>
+kixx cloudflare release --environment <name>
 ```
 
 Options are `--environment`/`-e`, `--force`, `--verbose`, `--origin`, and

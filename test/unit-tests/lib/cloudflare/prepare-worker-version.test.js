@@ -1,4 +1,4 @@
-import { assertEqual } from 'kixx-assert';
+import { assertEqual } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { describe } from 'kixx-test';
 import prepareWorkerVersion, {
     prepareWorkerVersion as namedPrepareWorkerVersion,

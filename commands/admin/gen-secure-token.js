@@ -1,10 +1,12 @@
 import process from 'node:process';
-import { subcommands } from './index.js';
 import { generateSecretToken } from '../../lib/crypto.js';
 
 export default class GenSecretTokenCommand {
 
-    static description = subcommands['gen-secure-token'].description;
+    static description = `
+        Generate a 256-bit secure token encoded as lowercase hexadecimal
+        text, suitable for things like the ADMIN_BOOTSTRAP_TOKEN
+    `;
 
     static options = {
         prefix: {

@@ -1,4 +1,4 @@
-import { assertEqual, assertMatches } from 'kixx-assert';
+import { assertEqual, assertMatches } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { describe } from 'kixx-test';
 
 import resolveRunningBuild from '../../../../lib/publishing/resolve-running-build.js';

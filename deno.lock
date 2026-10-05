@@ -1,0 +1,27 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@std/yaml@1": "1.3.0",
+    "npm:kixx-linting@1.1.2": "1.1.2",
+    "npm:kixx-test@3.0.0": "3.0.0"
+  },
+  "jsr": {
+    "@std/yaml@1.3.0": {
+      "integrity": "b250103854378b8b36cbff0fe95aec017d3d9ce86b489c67605180c602fb4922"
+    }
+  },
+  "npm": {
+    "kixx-linting@1.1.2": {
+      "integrity": "sha512-ViSxtlITfWFwl9tsf6fYcDto8Ddp0gWCCzJYQ6CGxqQr88aj37v6kW5G/B7n1yS+RnIbGW14Ef4XIuGoXVPRtA=="
+    },
+    "kixx-test@3.0.0": {
+      "integrity": "sha512-sZSa+b6okaGNNFOQf4sZGFbLcBAjOkeVFvEhZs1D19QedKBFSmcY1hYqiHDgl7GcoIxSNyyMriPhW/K20QphRw=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:kixx-linting@1.1.2",
+      "npm:kixx-test@3.0.0"
+    ]
+  }
+}

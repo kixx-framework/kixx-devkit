@@ -1,5 +1,5 @@
 import { describe } from 'kixx-test';
-import { assert, assertEqual, assertMatches } from 'kixx-assert';
+import { assert, assertEqual, assertMatches } from '../../../../lib/vendor/kixx-assert/mod.js';
 import BundleError from '../../../../lib/bundler/bundle-error.js';
 
 describe('BundleError', ({ it }) => {

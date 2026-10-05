@@ -103,6 +103,10 @@ Worker and version settings live in the project's `cloudflare-config.js`, keyed
 by environment name under `environments`. See [cloudflare.md](cloudflare.md)
 for its shape.
 
+`cloudflare-config.js` runs with the CLI's permissions. Under the Deno install
+it can read and write files, use the network, and read environment variables,
+but cannot start subprocesses (for example to ask `git` for a commit hash).
+
 ## Cloudflare environment and secret files
 
 `.env.<environment>` supplies ordinary `plain_text` Worker bindings and remains

@@ -1,4 +1,4 @@
-import { assert, assertEqual, assertMatches } from 'kixx-assert';
+import { assert, assertEqual, assertMatches } from '../../../../lib/vendor/kixx-assert/mod.js';
 import { describe } from 'kixx-test';
 
 import AdminRunMigrationCommand from '../../../../commands/admin/run-migration.js';

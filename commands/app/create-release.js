@@ -3,11 +3,10 @@ import process from 'node:process';
 import createApplicationRelease from '../../lib/publishing/create-application-release.js';
 import { wrapText } from '../../lib/text-wrap.js';
 import { renderReleaseResult } from './publish.js';
-import { subcommands } from './index.js';
 
 export default class AppCreateReleaseCommand {
 
-    static description = subcommands['create-release'].description;
+    static description = 'Create an immutable content Release without assigning a build';
     static options = {
         environment: { type: 'string', short: 'e', description: 'Required application environment' },
         'dry-run': { type: 'boolean', description: 'Preview the server-backed object diff without writes' },

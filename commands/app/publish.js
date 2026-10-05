@@ -8,7 +8,6 @@ import resolvePublishingEnvironment from '../../lib/publishing/resolve-publishin
 import resolveRunningBuild from '../../lib/publishing/resolve-running-build.js';
 import scanContentSources from '../../lib/publishing/scan-content-sources.js';
 import { wrapText } from '../../lib/text-wrap.js';
-import { subcommands } from './index.js';
 
 /**
  * A Release that was created successfully but could not be assigned to a
@@ -52,7 +51,7 @@ export class ReleaseAssignmentError extends Error {
 
 export default class AppPublishCommand {
 
-    static description = subcommands.publish.description;
+    static description = 'Create a content Release and assign it to the running or named build';
     static options = {
         environment: { type: 'string', short: 'e', description: 'Required application environment' },
         'build-id': { type: 'string', description: 'Build id; defaults to discovery\'s running build' },
@@ -115,7 +114,7 @@ export default class AppPublishCommand {
                 throw new ReleaseAssignmentError(
                     `Release "${ result.releaseId }" was created but could not be assigned to ` +
                     `build "${ buildId }": ${ cause.message }\n` +
-                    'Recover with: kixx.js app assign-build --environment ' +
+                    'Recover with: kixx app assign-build --environment ' +
                     `${ options?.environment } --build-id ${ buildId } --release-id ${ result.releaseId }`,
                     { releaseId: result.releaseId, buildId, cause },
                 );

@@ -11,58 +11,59 @@ Command Structure
 Every invocation names two things:
 
 ```
-kixx.js <command> <subcommand> [options] <...args>
+kixx <command> <subcommand> [options] <...args>
 ```
 
 The first argument is a **command**: a directory under `commands/`. The second
-is a **sub-command**: a `.js` module inside that directory. `commands/` is the
-whole registry — there is no list to register into, no import to add. Creating
-the files is what makes the command exist.
+is a **sub-command**: a `.js` module inside that directory. A command exists
+only once it is imported: each sub-command module is imported by its command's
+`index.js`, and each `index.js` is imported by `commands/index.js`.
 
 ```
 commands/
+    index.js                  <- command name -> command index module
     admin/
-        index.js              <- command metadata
+        index.js              <- command description and sub-command map
         gen-secure-token.js   <- sub-command implementation
     cloudflare/
         index.js
         create-worker.js
 ```
 
-`lib/command-registry.js` reads the directory to list commands, imports
-`<command>/index.js` for the descriptions used in help output, and imports
-`<command>/<subcommand>.js` to get the class it runs.
+`kixx.js` passes the map from `commands/index.js` to
+`lib/command-registry.js`, which lists and resolves commands from it. The CLI
+never reads the `commands/` directory. Static imports keep every command in the
+module graph, which is what lets the CLI run when installed from JSR, where
+there is no local directory to read.
 
 
 The Command Index Module
 ------------------------
 
-`index.js` carries only metadata. It exports `description` (used when listing
-top level commands) and `subcommands`, a map keyed by sub-command file basename:
+`index.js` exports `description` (used when listing top level commands) and
+`subcommands`, a map from sub-command name to sub-command class. The key must
+equal the module's file basename:
 
 ```js
+import GenSecretTokenCommand from './gen-secure-token.js';
+
 export const description = 'Application administration tools';
 
 export const subcommands = {
-    'gen-secure-token': {
-        description: `
-            Generate a 256-bit secure token encoded as lowercase hexadecimal
-            text, suitable for things like the ADMIN_BOOTSTRAP_TOKEN
-        `,
-    },
+    'gen-secure-token': GenSecretTokenCommand,
 };
 ```
 
-Descriptions are re-wrapped to the help line width, so the indentation of a
-template literal is irrelevant.
+Sub-commands list in help in the map's declaration order. Top level commands
+list alphabetically.
 
-The `subcommands` map is the source of truth for descriptions. Each sub-command
-module imports its own entry rather than restating the text, which keeps the
-listing and the `--help` output from drifting apart.
+A sub-command module must not import its command's `index.js`: `index.js`
+imports the module, so the cycle would leave the class's statics evaluating
+against an uninitialized binding.
 
-A sub-command file missing from this map still runs; it just lists with an
-empty description. A map entry with no matching file lists but fails to
-resolve. Keep the two in sync.
+`test/unit-tests/commands/index.test.js` fails when a `.js` file in a command
+directory is missing from its map, or a command directory is missing from
+`commands/index.js`.
 
 
 The Sub-command Module
@@ -75,11 +76,13 @@ partially configured.
 
 ```js
 import process from 'node:process';
-import { subcommands } from './index.js';
 
 export default class GenSecretTokenCommand {
 
-    static description = subcommands['gen-secure-token'].description;
+    static description = `
+        Generate a 256-bit secure token encoded as lowercase hexadecimal
+        text, suitable for things like the ADMIN_BOOTSTRAP_TOKEN
+    `;
 
     static options = {
         prefix: {
@@ -99,8 +102,9 @@ export default class GenSecretTokenCommand {
 
 ### Static properties
 
-**`description`** — Sentence or paragraph shown by `--help`. Import it from
-`./index.js`.
+**`description`** — Sentence or paragraph shown by `--help` and in the parent
+command's sub-command list. Required. Descriptions are re-wrapped to the help
+line width, so the indentation of a template literal is irrelevant.
 
 **`options`** — Passed straight to `node:util` `parseArgs` as its `options`
 config, so `type` (`'string'` or `'boolean'`), `short`, `multiple`, and
@@ -186,20 +190,21 @@ Adding a New Command
 To add a sub-command to an existing command:
 
 1. Create `commands/<command>/<subcommand>.js` default-exporting the class.
-2. Add a matching entry to the `subcommands` map in
-   `commands/<command>/index.js`.
+2. Import the class in `commands/<command>/index.js` and add it to the
+   `subcommands` map under the file's basename.
 
 To add a new top level command, also create the directory and its `index.js`
-exporting `description` and `subcommands`.
+exporting `description` and `subcommands`, then import that `index.js` as a
+namespace in `commands/index.js` and add it to the default-exported map.
 
 Then verify:
 
 ```
-node kixx.js                            # the command lists
-node kixx.js <command> --help           # the sub-command lists
-node kixx.js <command> <subcommand> --help
-node kixx.js <command> <subcommand>     # the real thing
-npm run lint
+deno task kixx                            # the command lists
+deno task kixx <command> --help           # the sub-command lists
+deno task kixx <command> <subcommand> --help
+deno task kixx <command> <subcommand>     # the real thing
+deno task lint
 ```
 
 Shared logic belongs in `lib/`, not in a command module. A command should read

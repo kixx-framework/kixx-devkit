@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe } from 'kixx-test';
-import { assert, assertEqual } from 'kixx-assert';
+import { assert, assertEqual } from '../../../lib/vendor/kixx-assert/mod.js';
 import fileSystem from '../../../lib/file-system.js';
 
 describe('file system', ({ after, before, it }) => {

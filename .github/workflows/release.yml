@@ -1,0 +1,99 @@
+# Publishes a release to JSR and npm when a v<version> tag is pushed.
+#
+# Both registries authenticate with GitHub OIDC (trusted publishing); no
+# tokens are stored. Each publish step skips when its registry already has the
+# version, so re-running after a partial failure completes the release.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.8.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Check the tag matches both manifest versions
+        id: version
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          deno_version="$(jq -r .version deno.json)"
+          npm_version="$(jq -r .version package.json)"
+
+          if [ "$tag_version" != "$deno_version" ] || [ "$tag_version" != "$npm_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match deno.json ($deno_version) and package.json ($npm_version)"
+            exit 1
+          fi
+
+          echo "version=$tag_version" >> "$GITHUB_OUTPUT"
+
+      - name: Type-check
+        run: deno task check
+
+      - name: Lint
+        run: deno task lint
+
+      - name: Test on Deno
+        run: deno task test
+
+      - name: Test on Node.js
+        run: deno task test:node
+
+      - name: Publish to JSR
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Outside the checkout: deno publish refuses a dirty working tree.
+          meta="$RUNNER_TEMP/jsr-meta.json"
+          status="$(curl -sS -o "$meta" -w '%{http_code}' https://jsr.io/@kixx/devkit/meta.json)"
+
+          if [ "$status" = "200" ] && jq -e --arg v "$VERSION" '.versions | has($v)' "$meta" > /dev/null; then
+            echo "JSR already has @kixx/devkit@$VERSION; skipping."
+            exit 0
+          fi
+
+          # 404 means the package has no versions yet. Anything else is an
+          # unknown registry state, so stop rather than guess.
+          if [ "$status" != "200" ] && [ "$status" != "404" ]; then
+            echo "::error::Unexpected HTTP $status from jsr.io meta.json"
+            exit 1
+          fi
+
+          deno publish
+
+      - name: Publish to npm
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$(npm view "kixx-devkit@$VERSION" version 2> /dev/null)" = "$VERSION" ]; then
+            echo "npm already has kixx-devkit@$VERSION; skipping."
+            exit 0
+          fi
+
+          # Trusted publishing needs npm 11.5.1 or later.
+          if [ "$(printf '%s\n' 11.5.1 "$(npm --version)" | sort -V | head -n 1)" != "11.5.1" ]; then
+            npm install -g npm@11
+          fi
+
+          npm publish --provenance --access public

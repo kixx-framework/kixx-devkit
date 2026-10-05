@@ -135,6 +135,25 @@ gets:
 deno task kixx <command> <subcommand> [options]
 ```
 
+Releasing
+---------
+
+`.github/workflows/release.yml` publishes to JSR and npm when a `v<version>`
+tag is pushed. It authenticates with GitHub OIDC (no stored tokens), checks the
+tag against both manifests, runs the checks below, and skips any registry that
+already has the version, so re-running a failed release finishes it.
+
+1. Set the same `version` in `deno.json` and `package.json`.
+2. Run the local validation:
+   ```
+   deno task check && deno task lint && deno task test && deno task test:node
+   ```
+3. Commit, then tag and push the tag:
+   ```
+   git tag v<version>
+   git push origin v<version>
+   ```
+
 Copyright and License
 ---------------------
 Copyright: (c) 2026 by Kris Walker (www.kriswalker.me)

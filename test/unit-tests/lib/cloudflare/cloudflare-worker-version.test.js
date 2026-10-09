@@ -130,10 +130,11 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
             version.addBinding({ type: 'secret_text', name: 'TOKEN', text: 'sekret' });
             version.addBinding({ type: 'version_metadata', name: 'META' });
             version.addBinding({ type: 'send_email', name: 'EMAIL' });
+            version.addBinding({ type: 'images', name: 'IMAGES' });
 
             const { bindings } = version.toJSON();
 
-            assertEqual(9, bindings.length);
+            assertEqual(10, bindings.length);
             assertEqual('d1-id', bindings[0].id);
             assertEqual('Counter', bindings[1].class_name);
             assertEqual('version-id', bindings[2].version_id);
@@ -144,6 +145,7 @@ describe('CloudflareWorkerVersion', ({ describe }) => {
             assertEqual('version_metadata', bindings[7].type);
             assertEqual('META', bindings[7].name);
             assertEqual(JSON.stringify({ type: 'send_email', name: 'EMAIL' }), JSON.stringify(bindings[8]));
+            assertEqual(JSON.stringify({ type: 'images', name: 'IMAGES' }), JSON.stringify(bindings[9]));
         });
 
         it('serializes email without projecting an application sender into a restriction', () => {

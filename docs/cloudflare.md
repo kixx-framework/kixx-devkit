@@ -177,6 +177,7 @@ Optional application resource blocks produce bindings:
 | `JOB_QUEUE` | Durable Object namespace (`durableObjectBindingName`, `durableObjectClassName`); other keys are runtime config ignored by devkit |
 | `OBJECT_STORE.buckets` | One R2 binding per bucket |
 | `SEND_EMAIL` | Email sending binding (`send_email`) |
+| `IMAGES` | Cloudflare Images binding (`images`) |
 
 Configure email sending in the selected environment block:
 
@@ -199,6 +200,19 @@ detect the change without `--force`.
 
 Sender-domain onboarding is a separate Cloudflare prerequisite. See the
 [Workers email API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/).
+
+Configure image transformation the same way:
+
+```js
+IMAGES: {
+    bindingName: 'IMAGES',
+},
+```
+
+`IMAGES` follows the same rules as `SEND_EMAIL`. The upload binding is
+`{ type: 'images', name: 'IMAGES' }`; other keys in the block are
+application configuration and are ignored. See the
+[Images binding](https://developers.cloudflare.com/images/transform-images/bindings/).
 
 Each `OBJECT_STORE.buckets` entry takes a required `bindingName` and
 `bucketName`, plus three optional keys:

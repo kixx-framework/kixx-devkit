@@ -15,6 +15,7 @@ describe('worker-bindings', ({ it }) => {
         assertEqual(1, byType.durable_object_namespace.length);
         assertEqual(1, byType.r2_bucket.length);
         assertEqual(1, byType.send_email.length);
+        assertEqual(1, byType.images.length);
         // TRUST_PROXY, plus the injected ENVIRONMENT.
         assertEqual(2, byType.plain_text.length);
         assertEqual(1, byType.inherit.length);
@@ -106,70 +107,85 @@ describe('worker-bindings', ({ it }) => {
         assert(caught.message.includes('DOCUMENT_STORE.bindingName'), 'expected the message to name the path');
     });
 
-    it('projects SEND_EMAIL without application fields', () => {
+    it('projects SEND_EMAIL and IMAGES without application fields', () => {
         const bindings = build({
-            environmentConfig: { SEND_EMAIL: { bindingName: 'EMAIL', from: 'no-reply@example.com' } },
+            environmentConfig: {
+                SEND_EMAIL: { bindingName: 'EMAIL', from: 'no-reply@example.com' },
+                IMAGES: { bindingName: 'IMAGES', bucket: 'media' },
+            },
             envars: {},
         });
 
         assertEqual(JSON.stringify([
             { type: 'send_email', name: 'EMAIL' },
             { type: 'plain_text', name: 'ENVIRONMENT', text: 'production' },
+            { type: 'images', name: 'IMAGES' },
         ]), JSON.stringify(bindings));
     });
 
-    it('rejects malformed present SEND_EMAIL blocks', () => {
-        for (const block of [ null, false, '', 'EMAIL', [], 42 ]) {
-            const caught = catchError(() => build({ environmentConfig: { SEND_EMAIL: block } }));
+    // SEND_EMAIL and IMAGES share one validation path; each case runs against both.
+    const NAME_ONLY_BLOCKS = [ 'SEND_EMAIL', 'IMAGES' ];
 
-            assert(caught, 'expected malformed email configuration to be rejected');
-            assertEqual('UsageError', caught.name);
-            assert(caught.message.includes('SEND_EMAIL must be an object'), 'expected the config path');
+    it('rejects malformed present name-only blocks', () => {
+        for (const configKey of NAME_ONLY_BLOCKS) {
+            for (const block of [ null, false, '', 'EMAIL', [], 42 ]) {
+                const caught = catchError(() => build({ environmentConfig: { [configKey]: block } }));
+
+                assert(caught, `expected malformed ${ configKey } configuration to be rejected`);
+                assertEqual('UsageError', caught.name);
+                assert(caught.message.includes(`${ configKey } must be an object`), 'expected the config path');
+            }
         }
     });
 
-    it('rejects missing, empty, and invalid email binding names', () => {
-        for (const bindingName of [ undefined, null, false, 42, '', ' ', ' EMAIL', 'EMAIL ', '1EMAIL', 'SEND-EMAIL' ]) {
-            const caught = catchError(() => {
-                return build({ environmentConfig: { SEND_EMAIL: { bindingName } } });
-            });
+    it('rejects missing, empty, and invalid name-only binding names', () => {
+        for (const configKey of NAME_ONLY_BLOCKS) {
+            for (const bindingName of [ undefined, null, false, 42, '', ' ', ' EMAIL', 'EMAIL ', '1EMAIL', 'SEND-EMAIL' ]) {
+                const caught = catchError(() => {
+                    return build({ environmentConfig: { [configKey]: { bindingName } } });
+                });
 
-            assert(caught, 'expected an invalid email binding name to be rejected');
-            assertEqual('UsageError', caught.name);
-            assert(caught.message.includes('SEND_EMAIL.bindingName'), 'expected the config path');
+                assert(caught, `expected an invalid ${ configKey } binding name to be rejected`);
+                assertEqual('UsageError', caught.name);
+                assert(caught.message.includes(`${ configKey }.bindingName`), 'expected the config path');
+            }
         }
     });
 
-    it('rejects command-owned email binding names', () => {
-        for (const bindingName of [ 'ENVIRONMENT', 'BUILD_ID' ]) {
-            const caught = catchError(() => {
-                return build({ environmentConfig: { SEND_EMAIL: { bindingName } } });
-            });
+    it('rejects command-owned name-only binding names', () => {
+        for (const configKey of NAME_ONLY_BLOCKS) {
+            for (const bindingName of [ 'ENVIRONMENT', 'BUILD_ID' ]) {
+                const caught = catchError(() => {
+                    return build({ environmentConfig: { [configKey]: { bindingName } } });
+                });
 
-            assert(caught, 'expected a reserved name to be rejected');
-            assertEqual('UsageError', caught.name);
-            assert(caught.message.includes('SEND_EMAIL.bindingName'), 'expected the config path');
-            assert(caught.message.includes(bindingName), 'expected the reserved name');
+                assert(caught, 'expected a reserved name to be rejected');
+                assertEqual('UsageError', caught.name);
+                assert(caught.message.includes(`${ configKey }.bindingName`), 'expected the config path');
+                assert(caught.message.includes(bindingName), 'expected the reserved name');
+            }
         }
     });
 
-    it('reports both sources when email collides with a resource, plain value, or secret', () => {
+    it('reports both sources when a name-only binding collides with a resource, plain value, or secret', () => {
         const cases = [
             { bindingName: 'DOCUMENT_STORE', source: 'DOCUMENT_STORE' },
             { bindingName: 'TRUST_PROXY', source: '.env.production' },
             { bindingName: 'API_SECRET', source: 'example.env.secrets' },
         ];
 
-        for (const { bindingName, source } of cases) {
-            const environmentConfig = makeEnvironmentConfig();
-            environmentConfig.SEND_EMAIL = { bindingName };
+        for (const configKey of NAME_ONLY_BLOCKS) {
+            for (const { bindingName, source } of cases) {
+                const environmentConfig = makeEnvironmentConfig();
+                environmentConfig[configKey] = { bindingName };
 
-            const caught = catchError(() => build({ environmentConfig, secretNames: [ 'API_SECRET' ] }));
+                const caught = catchError(() => build({ environmentConfig, secretNames: [ 'API_SECRET' ] }));
 
-            assert(caught, 'expected a collision to be rejected');
-            assertEqual('UsageError', caught.name);
-            assert(caught.message.includes('SEND_EMAIL'), 'expected the email source');
-            assert(caught.message.includes(source), 'expected the conflicting source');
+                assert(caught, 'expected a collision to be rejected');
+                assertEqual('UsageError', caught.name);
+                assert(caught.message.includes(configKey), `expected the ${ configKey } source`);
+                assert(caught.message.includes(source), 'expected the conflicting source');
+            }
         }
     });
 
@@ -274,6 +290,7 @@ describe('worker-bindings', ({ it }) => {
         const bindingsOne = build({ environmentConfig: config, secretNames: [ 'API_SECRET' ] });
 
         const reordered = {
+            IMAGES: config.IMAGES,
             SEND_EMAIL: config.SEND_EMAIL,
             OBJECT_STORE: config.OBJECT_STORE,
             CONTENT_STORE: config.CONTENT_STORE,
@@ -322,6 +339,7 @@ function makeEnvironmentConfig() {
             buckets: { assets: { bindingName: 'ASSET_BUCKET', bucketName: 'assets' } },
         },
         SEND_EMAIL: { bindingName: 'EMAIL', from: 'no-reply@example.com' },
+        IMAGES: { bindingName: 'IMAGES', bucket: 'media' },
     };
 }
 
